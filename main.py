@@ -39,10 +39,13 @@ TEST_VIDEO_PATH = 0  # e.g., 0 for default cam, or "rtsp://username:password@ip:
 # Can be disabled with env USE_PYGAME_DISPLAY=0
 USE_PYGAME_DISPLAY = os.environ.get("USE_PYGAME_DISPLAY", "1") != "0"
 os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
+
+
 # ---- Audio setup (pygame) ----
 class _Null:
     def play(self):
         pass
+
 
 beep = _Null()
 shutter = _Null()
@@ -384,7 +387,9 @@ def main():
             screen_size = (info.current_w, info.current_h)
             screen = pygame.display.set_mode(screen_size, pygame.FULLSCREEN)
             pygame.mouse.set_visible(False)
-            print(f"[INFO] Pygame fullscreen display initialized (kmsdrm): {screen_size}")
+            print(
+                f"[INFO] Pygame fullscreen display initialized (kmsdrm): {screen_size}"
+            )
         except Exception as e:
             print(f"[WARN] Pygame KMSDRM init failed: {e}; trying fbcon fallback")
             try:
@@ -397,9 +402,13 @@ def main():
                 screen_size = (info.current_w, info.current_h)
                 screen = pygame.display.set_mode(screen_size, pygame.FULLSCREEN)
                 pygame.mouse.set_visible(False)
-                print(f"[INFO] Pygame fullscreen display initialized (fbcon): {screen_size}")
+                print(
+                    f"[INFO] Pygame fullscreen display initialized (fbcon): {screen_size}"
+                )
             except Exception as e2:
-                print(f"[WARN] Pygame fbcon init failed: {e2}; falling back to OpenCV window (may not work headless)")
+                print(
+                    f"[WARN] Pygame fbcon init failed: {e2}; falling back to OpenCV window (may not work headless)"
+                )
                 screen = None
                 try:
                     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)

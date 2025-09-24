@@ -3,6 +3,8 @@ import threading
 import cv2
 import pygame
 import os
+import platform
+import sys
 
 try:
     from picamera2 import Picamera2
@@ -34,11 +36,32 @@ USE_WEBCAM = (
 # NOTE: Do not store real credentials in source control.
 TEST_VIDEO_PATH = 0  # e.g., 0 for default cam, or "rtsp://username:password@ip:554/cam/realmonitor?channel=1&subtype=0"
 
-# Display selection
-# In terminal-only (no desktop), prefer pygame KMSDRM fullscreen for kiosk display.
-# Can be disabled with env USE_PYGAME_DISPLAY=0
-USE_PYGAME_DISPLAY = os.environ.get("USE_PYGAME_DISPLAY", "1") != "0"
-os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
+# Display / kiosk selection
+# Only attempt pygame framebuffer (kmsdrm/fbcon) when running on Linux *without* X/Wayland.
+IS_LINUX = platform.system() == "Linux"
+HAS_DISPLAY_SERVER = bool(
+    os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+)
+SSH_SESSION = bool(os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY"))
+ON_CONSOLE_VT = (
+    IS_LINUX and not HAS_DISPLAY_SERVER and not SSH_SESSION and sys.stdout.isatty()
+)
+HEADLESS_CONSOLE = ON_CONSOLE_VT
+# Default: enable kiosk only on a real local console (not SSH) unless overridden.
+USE_PYGAME_DISPLAY = (
+    os.environ.get("USE_PYGAME_DISPLAY") or ("1" if ON_CONSOLE_VT else "0")
+) != "0"
+if IS_LINUX:
+    # Favor ALSA only on Linux; don't force on Windows/macOS.
+    os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
+
+# Performance tuning (Pi 2 W is slow). Set LOW_POWER=1 to use a smaller capture size.
+LOW_POWER = os.environ.get("LOW_POWER") == "1"
+CAM_RESOLUTION = (960, 540) if LOW_POWER else (1280, 720)
+
+print(
+    f"[ENV] IS_LINUX={IS_LINUX} HAS_DISPLAY_SERVER={HAS_DISPLAY_SERVER} SSH_SESSION={SSH_SESSION} ON_CONSOLE_VT={ON_CONSOLE_VT} USE_PYGAME_DISPLAY={USE_PYGAME_DISPLAY} LOW_POWER={LOW_POWER}"
+)
 
 
 # ---- Audio setup (pygame) ----
@@ -66,6 +89,22 @@ except Exception as e:
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 GPIO.setup(RELAY_PIN, GPIO.OUT)
+
+# ---- Optional remote debugging (debugpy) ----
+# Enable by setting DEBUG_ATTACH=1. Customize host/port with DEBUG_HOST / DEBUG_PORT.
+if os.environ.get("DEBUG_ATTACH") == "1":
+    try:
+        import debugpy  # type: ignore
+
+        dbg_host = os.environ.get("DEBUG_HOST", "0.0.0.0")
+        dbg_port = int(os.environ.get("DEBUG_PORT", "5678"))
+        debugpy.listen((dbg_host, dbg_port))
+        print(f"[DEBUG] debugpy listening on {dbg_host}:{dbg_port}")
+        if os.environ.get("DEBUG_WAIT") == "1":
+            print("[DEBUG] Waiting for debugger to attach...")
+            debugpy.wait_for_client()
+    except Exception as _e:
+        print(f"[WARN] debugpy attach failed: {_e}")
 
 # ---- State ----
 state = {
@@ -350,12 +389,14 @@ def main():
     if PICAMERA2_AVAILABLE:
         try:
             picam2 = Picamera2()
-            cam_config = picam2.create_preview_configuration(main={"size": (1280, 720)})
+            cam_config = picam2.create_preview_configuration(
+                main={"size": CAM_RESOLUTION}
+            )
             picam2.configure(cam_config)
             picam2.start()
             # Warm-up
             time.sleep(0.5)
-            print("[INFO] Using PiCam via Picamera2")
+            print(f"[INFO] Using PiCam via Picamera2 @ {CAM_RESOLUTION}")
         except Exception as e:
             print(f"[WARN] Picamera2 init failed: {e}; falling back to OpenCV capture")
             picam2 = None
@@ -372,48 +413,36 @@ def main():
     screen = None
     screen_size = None
     if USE_PYGAME_DISPLAY:
-        try:
-            # Use KMSDRM on console; if running under X/Wayland it will choose appropriate backend
-            os.environ.setdefault("SDL_VIDEODRIVER", "kmsdrm")
-            if not pygame.get_init():
-                pygame.init()
-            if not pygame.mixer.get_init():
-                try:
-                    pygame.mixer.init()
-                except Exception:
-                    pass
-            pygame.display.init()
-            info = pygame.display.Info()
-            screen_size = (info.current_w, info.current_h)
-            screen = pygame.display.set_mode(screen_size, pygame.FULLSCREEN)
-            pygame.mouse.set_visible(False)
-            print(
-                f"[INFO] Pygame fullscreen display initialized (kmsdrm): {screen_size}"
-            )
-        except Exception as e:
-            print(f"[WARN] Pygame KMSDRM init failed: {e}; trying fbcon fallback")
+        drivers_to_try = ["kmsdrm", "fbcon", "directfb", "svgalib"]
+        for drv in drivers_to_try:
             try:
-                os.environ["SDL_VIDEODRIVER"] = "fbcon"
+                os.environ["SDL_VIDEODRIVER"] = drv
                 if not pygame.get_init():
                     pygame.init()
-                pygame.display.quit()
+                else:
+                    pygame.display.quit()
                 pygame.display.init()
                 info = pygame.display.Info()
                 screen_size = (info.current_w, info.current_h)
                 screen = pygame.display.set_mode(screen_size, pygame.FULLSCREEN)
                 pygame.mouse.set_visible(False)
-                print(
-                    f"[INFO] Pygame fullscreen display initialized (fbcon): {screen_size}"
-                )
-            except Exception as e2:
-                print(
-                    f"[WARN] Pygame fbcon init failed: {e2}; falling back to OpenCV window (may not work headless)"
-                )
+                print(f"[INFO] Pygame fullscreen with driver '{drv}' -> {screen_size}")
+                break
+            except Exception as e:
+                print(f"[WARN] Driver '{drv}' failed: {e}")
                 screen = None
-                try:
-                    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-                except Exception:
-                    pass
+        if screen is None:
+            print(
+                "[ERROR] No suitable SDL framebuffer driver worked; no live preview will show."
+            )
+            print(
+                "        Hints: (1) Install apt version: sudo apt install python3-pygame"
+                " (2) Ensure user in 'video' group (3) HDMI connected before boot (4) Try: export USE_PYGAME_DISPLAY=0"
+            )
+            try:
+                cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+            except Exception:
+                pass
     else:
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
         # cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
@@ -466,7 +495,7 @@ def main():
                 video_filename = f"{session_time}_{session_id}_booth.mp4"
                 video_path = os.path.join(video_dir, video_filename)
                 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-                fps = 20.0
+                fps = 15.0 if LOW_POWER else 20.0
                 height, width = frame.shape[:2]
                 video_writer = cv2.VideoWriter(video_path, fourcc, fps, (width, height))
                 recording = True

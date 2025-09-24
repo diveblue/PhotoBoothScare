@@ -1,2 +1,4 @@
 opencv-python
 pygame
+# Remote debugging (optional, used when DEBUG_ATTACH=1)
+debugpy>=1.8.0

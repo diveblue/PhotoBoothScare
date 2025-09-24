@@ -1,0 +1,70 @@
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+.env/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json
+.vscode/*.log
+
+# Logs & runtime artifacts
+*.log
+logs/
+
+# Media output (captured photos/videos)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.jpg
+*.jpeg
+*.png
+*.gif
+media/
+
+# Temporary files
+*.tmp
+*.swp
+*.bak
+
+# Coverage / test artifacts
+htmlcov/
+.coverage*
+.pytest_cache/
+.tox/
+.mypy_cache/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Secrets / keys (ensure you don't actually commit real ones)
+*.key
+*.pem
+*.crt
+APIKeys.txt
+
+# Local config overrides (add if you create per-machine configs)
+local_settings.py
+config.local.json
+
+# Node/npm (in case you add web UI later)
+node_modules/
+
+# Pillow / font caches
+.cache/
+
+# IDE workspace backup
+*.code-workspace.bak

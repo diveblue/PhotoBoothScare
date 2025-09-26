@@ -1,13 +1,30 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Run Photo Booth Scare",
-      "type": "python",
-      "request": "launch",
-      "program": "${workspaceFolder}/main.py",
-      "console": "integratedTerminal",
-      "justMyCode": true
-    }
-  ]
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Run main.py (Windows)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: Attach to Remote Pi (debugpy)",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "<PI_IP_ADDRESS>",
+                "port": 5678
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "/home/pi/PhotoBoothScare"
+                }
+            ]
+        }
+    ]
+}
+
 }

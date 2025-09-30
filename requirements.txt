@@ -1,4 +1,27 @@
-opencv-python
+# Suggested Python requirements for Raspberry Pi 4 (4GB)
+# Note: ffmpeg itself is a system package (apt), not a pip package. Install with:
+#   sudo apt update; sudo apt install -y ffmpeg
+
+# Core imaging & numeric libs
+numpy
+Pillow
+# Prefer headless OpenCV on Pi to avoid GUI build deps; use plain opencv-python if you need GUI
+opencv-python-headless
+
+# Game/preview UI
 pygame
-# Remote debugging (optional, used when DEBUG_ATTACH=1)
+
+# QR code generation
+qrcode[pil]
+
+# ONVIF helper (fetch tokenized RTSP URIs)
+onvif-zeep
+
+# Optional TTS/STT or voice libs (install only if used)
+# pyttsx3
+
+# Remote debugging (optional)
 debugpy>=1.8.0
+
+# Networking/utilities
+requests

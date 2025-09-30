@@ -1,19 +1,50 @@
 {
   "BUTTON_PIN": 17,
-  "RELAY_PIN": 23,
+  "RELAY_PIN": 27,
   "COUNTDOWN_SECONDS": 3,
   "WINDOW_NAME": "Haunt Photo-Booth Preview",
   "USE_WEBCAM": true,
   "TEST_VIDEO_PATH": 0,
-  "PHOTO_DIR": "\\SKYNAS\\web\\Halloween2025\\media\\photos",
-  "VIDEO_DIR": "\\SKYNAS\\web\\Halloween2025\\media\\videos",
+  "PHOTO_DIR": "./local_photos",
+  "VIDEO_DIR": "./local_videos",
+  "NETWORK_PHOTO_DIR": "\\\\SKYNAS\\web\\Halloween2025\\media\\photos",
+  "NETWORK_VIDEO_DIR": "\\\\SKYNAS\\web\\Halloween2025\\media\\videos",
   "FONT_PATH": "assets/Creepster-Regular.ttf",
   "FONT_SIZE": 64,
   "OVERLAY_GOTCHA_TEXT": "Gotcha!\nHappy Halloween!",
   "OVERLAY_IDLE_TEXT": "Press Button to Take Photo",
-  "RTSP_URL": "rtsp://username:password@ip:554/cam/realmonitor?channel=1&subtype=0",
+  "RTSP_URL": "onvif://admin:dive2000@192.168.86.38",
+  "RTSP_USER": "admin",
+  "RTSP_PASS": "dive2000",
   "RTSP_VIDEO_FPS": 20.0,
   "PYGAME_DRIVERS": ["kmsdrm", "fbcon", "directfb", "svgalib"],
   "CAM_RESOLUTION_LOW": [960, 540],
-  "CAM_RESOLUTION_HIGH": [1280, 720]
+  "CAM_RESOLUTION_HIGH": [1280, 720],
+  "DEBUG_ENABLED": false,
+  "DEBUG_TIMING": false,
+  "DEBUG_AUDIO": false,
+  "DEBUG_GPIO": false,
+  "DEBUG_CAMERA": false,
+  "QR_DISPLAY_SECONDS": 5.0,
+  "LIGHTING_MODE": "TESTING",
+  "CAMERA_SETTINGS": {
+    "TESTING": {
+      "AwbMode": 1,
+      "Brightness": 0.0,
+      "Contrast": 1.1,
+      "Saturation": 0.8,
+      "ExposureTime": 16666,
+      "AnalogueGain": 1.0,
+      "NoiseReductionMode": 0
+    },
+    "HALLOWEEN_NIGHT": {
+      "AwbMode": 1,
+      "Brightness": 0.1,
+      "Contrast": 1.2,
+      "Saturation": 1.1,
+      "ExposureTime": 33333,
+      "AnalogueGain": 2.0,
+      "NoiseReductionMode": 1
+    }
+  }
 }

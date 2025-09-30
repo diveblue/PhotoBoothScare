@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# create_website_mount
+# Minimal script to mount the SKYNAS share used in config.json, create local
+# dirs for photos/videos, add an /etc/smbcredentials file (from env or prompt),
+# ensure an fstab entry exists and verify write access.
+
+set -euo pipefail
+
+echo "create_website_mount: starting"
+
+CFG="$(dirname "$0")/config.json"
+if [ ! -f "$CFG" ]; then
+  echo "config.json not found at $CFG" >&2
+  exit 1
+fi
+
+# Extract UNC paths using python
+map=$(python3 - "$CFG" <<'PY'
+import json,sys
+cfg=json.load(open(sys.argv[1]))
+print(cfg.get('PHOTO_DIR',''))
+print(cfg.get('VIDEO_DIR',''))
+PY
+)
+read -r PHOTO_DIR VIDEO_DIR <<< "$map"
+
+if [ -z "$PHOTO_DIR" ] || [ -z "$VIDEO_DIR" ]; then
+  echo "PHOTO_DIR or VIDEO_DIR empty in config.json" >&2
+  exit 1
+fi
+
+# Convert Windows UNC path like \\\\SKYNAS\\\\web\\\\... to components
+parse_unc(){
+  p="$1"
+  # remove leading backslashes and normalize separators
+  p="${p#\\\\}"
+  # replace backslashes with slashes
+  p="${p//\\/\/}"
+  # split
+  IFS='/' read -r host share rest <<< "$p"
+  echo "$host" "$share" "$rest"
+}
+
+read HOST SHARE PHOTO_REST <<< "$(parse_unc "$PHOTO_DIR")"
+read _ _ VIDEO_REST <<< "$(parse_unc "$VIDEO_DIR")"
+
+if [ -z "$HOST" ] || [ -z "$SHARE" ]; then
+  echo "Failed to parse UNC path from config.json: $PHOTO_DIR" >&2
+  exit 1
+fi
+
+MOUNT_BASE="/mnt/$(echo "$HOST" | tr '[:upper:]' '[:lower:]')/$SHARE"
+PHOTO_LOCAL_DIR="$MOUNT_BASE/$PHOTO_REST"
+VIDEO_LOCAL_DIR="$MOUNT_BASE/$VIDEO_REST"
+
+echo "Mount base: $MOUNT_BASE"
+echo "Photo dir: $PHOTO_LOCAL_DIR"
+echo "Video dir: $VIDEO_LOCAL_DIR"
+
+sudo mkdir -p "$PHOTO_LOCAL_DIR" "$VIDEO_LOCAL_DIR"
+
+CREDFILE="/etc/smbcredentials/skynas.conf"
+if [ ! -f "$CREDFILE" ]; then
+  if [ -n "${SMBUSER:-}" ] && [ -n "${SMBPASS:-}" ]; then
+    echo "username=$SMBUSER" | sudo tee "$CREDFILE" >/dev/null
+    echo "password=$SMBPASS" | sudo tee -a "$CREDFILE" >/dev/null
+    sudo chmod 600 "$CREDFILE"
+    echo "Wrote credentials from environment to $CREDFILE"
+  else
+    echo "Enter SMB credentials for $HOST (they will be saved to $CREDFILE):"
+    read -r -p "Username: " u
+    read -r -s -p "Password: " p
+    echo
+    printf 'username=%s
+password=%s
+' "$u" "$p" | sudo tee "$CREDFILE" >/dev/null
+    sudo chmod 600 "$CREDFILE"
+  fi
+else
+  echo "Credentials file $CREDFILE already exists; using it"
+fi
+
+# fstab entry
+FSTAB_LINE="//$HOST/$SHARE  $MOUNT_BASE  cifs  credentials=$CREDFILE,vers=3.0,uid=$(id -u),gid=$(id -g),iocharset=utf8  0  0"
+
+if ! grep -Fq "//$HOST/$SHARE" /etc/fstab; then
+  echo "Adding fstab entry for //$HOST/$SHARE"
+  echo "$FSTAB_LINE" | sudo tee -a /etc/fstab >/dev/null
+else
+  echo "fstab already contains //$HOST/$SHARE; skipping append"
+fi
+
+# Mount now
+if mountpoint -q "$MOUNT_BASE"; then
+  echo "$MOUNT_BASE already mounted"
+else
+  echo "Mounting $MOUNT_BASE"
+  sudo mount "$MOUNT_BASE" || sudo mount -a
+fi
+
+# Verify write
+TESTFILE="$PHOTO_LOCAL_DIR/.photobooth_test_$(date +%s)"
+if sudo sh -c "touch '$TESTFILE' && echo OK"; then
+  sudo rm -f "$TESTFILE"
+  echo "OK: writable: $PHOTO_LOCAL_DIR"
+else
+  echo "FAIL: cannot write to $PHOTO_LOCAL_DIR" >&2
+  exit 2
+fi
+
+echo "Done. Mounted and writable. fstab entry present." 

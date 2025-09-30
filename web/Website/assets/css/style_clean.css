@@ -1,0 +1,21 @@
+/* Widowmont Drive Church of the Unholy - Halloween Gallery Styles */
+
+/* Import creepy Halloween fonts */
+@import url('https://fonts.googleapis.com/css2?family=Butcherman&family=Nosifer&family=Creepster&family=Chiller:wght@400&display=swap');
+
+:root {
+    --bg-primary: #0a0a0a;
+    --bg-secondary: #1a1a1a;
+    --bg-card: #2a2a2a;
+    --text-primary: #e8e8e8;
+    --text-secondary: #b8b8b8;
+    --text-muted: #888;
+    --accent-orange: #ff6b35;
+    --accent-red: #dc2626;
+    --accent-purple: #7c3aed;
+    --border-dark: #333;
+    --shadow-dark: rgba(0, 0, 0, 0.8);
+    --gradient-dark: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+}
+
+/* ...existing code... */

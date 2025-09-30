@@ -220,3 +220,53 @@ class OverlayRenderer:
                 cv2.LINE_AA,
             )
             return frame
+
+    def draw_rtsp_status(self, frame, status_text, status_color):
+        """
+        Draws a small overlay in the lower right corner with RTSP status.
+        status_text: 'RTSP Connecting', 'ONLINE', 'OFFLINE', etc.
+        status_color: (0,255,0) for green, (0,0,255) for red, etc.
+        """
+        import cv2
+
+        h, w = frame.shape[:2]
+        pad = 16
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        # Reduce font size to about half for a compact indicator
+        font_scale = 0.4
+        thickness = 1
+        text = status_text
+        (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
+        y = h - pad
+        # Layout: compute total box width including dot + spacing + text + inner padding
+        dot_radius = 6
+        spacing = 8
+        inner_pad = 10
+        total_box_width = (dot_radius * 2) + spacing + tw + (inner_pad * 2)
+        box_right = w - 10
+        box_left = box_right - total_box_width
+        # Draw background rectangle
+        cv2.rectangle(
+            frame,
+            (int(box_left), int(y - th - inner_pad)),
+            (int(box_right), int(y + inner_pad)),
+            (30, 30, 30),
+            -1,
+        )
+        # Dot position (left inside box)
+        dot_x = int(box_left + inner_pad + dot_radius)
+        dot_y = int(y - th // 2)
+        cv2.circle(frame, (dot_x, dot_y), dot_radius, status_color, -1)
+        # Text position (to the right of the dot)
+        text_x = int(box_left + inner_pad + (dot_radius * 2) + spacing)
+        cv2.putText(
+            frame,
+            text,
+            (text_x, y),
+            font,
+            font_scale,
+            status_color,
+            thickness,
+            cv2.LINE_AA,
+        )
+        return frame

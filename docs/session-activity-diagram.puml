@@ -1,0 +1,148 @@
+@startuml PhotoBoothSessionActivity
+!theme cerulean
+title PhotoBooth Session Flow - SOLID Architecture
+
+start
+
+:Application starts;
+:Initialize managers;
+note right
+  Managers:
+  • SessionManager (orchestrator)
+  • CameraManager 
+  • VideoManager (with audio)
+  • AudioManager
+  • PhotoCaptureManager
+  • GPIOManager
+  • OverlayRenderer
+end note
+
+:Display camera preview with idle overlay;
+
+repeat
+  :main.py calls SessionManager.update();
+  :Check for user input (button/keyboard);
+repeat while (SessionManager.is_idle()?)
+
+partition "Countdown Phase" {
+  :SessionManager.update() returns action.start_video;
+  :Execute action.start_video (VideoManager);
+  note right: Video recording begins at countdown start
+  
+  repeat
+    :SessionManager.update() returns action.countdown_update;
+    note right
+      **Coordinated Action:**
+      {
+        'number': 3,
+        'play_beep': True,
+        'show_display': True,
+        'trigger_prop': False
+      }
+    end note
+    
+    :Execute coordinated countdown action;
+    fork
+      :AudioManager.play_beep();
+    fork again
+      :OverlayRenderer shows countdown number;
+    fork again
+      if (countdown_update.trigger_prop?) then (yes)
+        :GPIOManager.trigger_scare();
+        note right: Prop activation at countdown=1
+      endif
+    end fork
+    
+  repeat while (Countdown > 0?)
+}
+
+partition "Smile/Photo Phase" {
+  :SessionManager.update() returns action.show_smile;
+  :Execute action.play_shutter (AudioManager);
+  :Display "SMILE!" overlay;
+  
+  repeat
+    :Execute action.capture_photo (PhotoCaptureManager);
+    :Save photo to local storage;
+  repeat while (More photos needed?)
+}
+
+partition "Gotcha Display Phase" {
+  :SessionManager.update() returns action.show_gotcha;
+  :Display gotcha text overlay;
+  note right: Visual effect only - prop already triggered
+  :Continue video+audio recording;
+}
+
+partition "QR Code Phase" {
+  :SessionManager.update() returns action.show_qr;
+  :Execute action.stop_video (VideoManager);
+  :Generate QR code for session URL;
+  :Display QR code + "Scan for Photos" overlay;
+
+  
+  fork
+    :VideoManager processes video+audio with FFmpeg;
+    :Validate output file integrity;
+  fork again
+    :Execute action.move_files when video ready;
+    :Move photos to network storage;
+    :Move video to network storage;
+  end fork
+}
+
+partition "Session Completion" {
+  :Wait for QR display timeout;
+  :SessionManager.update() returns action.session_complete;
+  :Execute action.cleanup_session;
+  :Reset all session state to idle;
+}
+
+stop
+
+note bottom
+  **SOLID Architecture Principles:**
+  
+  **SessionManager**: Single orchestrator for all state transitions
+  • Calls: SessionManager.update() every frame
+  • Returns: SessionAction with specific actions to execute
+  • Eliminates: Scattered state management across main.py
+  
+  **Coordinated Action Pattern**: Improved orchestration for tightly coupled actions
+  
+  **Before (Fragmented):**
+  • action.play_beep = True
+  • action.show_countdown = True  
+  • action.countdown_number = 3
+  • action.trigger_scare = True (separate timing)
+  
+  **After (Coordinated):**
+  • action.countdown_update = {
+      'number': 3,
+      'play_beep': True,
+      'show_display': True, 
+      'trigger_prop': True (when countdown==1)
+    }
+  
+  **Benefits:**
+  ✅ Atomic operations - beep + display + prop happen together
+  ✅ Perfect timing synchronization
+  ✅ Cleaner logic and easier debugging
+  ✅ Maintains Command pattern with better cohesion
+  
+  **Manager Responsibilities:**
+  • CameraManager: Hardware abstraction (Picamera2/OpenCV)
+  • VideoManager: Video+audio recording with FFmpeg muxing
+  • AudioManager: Sound effects via pygame.mixer  
+  • PhotoCaptureManager: Multi-photo capture during smile phase
+  • GPIOManager: Button input and relay control for props
+  • OverlayRenderer: All visual overlays based on session state
+  
+  **Architecture Improvements:**
+  ❌ GotchaManager eliminated - timing handled by SessionManager
+  ❌ Duplicate VideoManager removed - single implementation with audio
+  ❌ Fragmented actions - replaced with coordinated action objects
+  ✅ Clean SOLID design with improved Command pattern
+end note
+
+@enduml

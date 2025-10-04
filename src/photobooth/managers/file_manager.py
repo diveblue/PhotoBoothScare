@@ -14,6 +14,33 @@ class FileManager:
         self.config = config
         self.debug_log = debug_log_func
 
+    def _wait_for_video_ready(self, filepath, max_wait=3.0):
+        """Wait briefly for video file to be ready (audio muxing complete)."""
+        import time
+
+        start_time = time.time()
+        last_size = -1
+
+        while time.time() - start_time < max_wait:
+            try:
+                if not os.path.exists(filepath):
+                    time.sleep(0.1)
+                    continue
+
+                current_size = os.path.getsize(filepath)
+                if (
+                    current_size == last_size and current_size > 1000
+                ):  # File stable and has content
+                    return True
+
+                last_size = current_size
+                time.sleep(0.2)
+            except OSError:
+                time.sleep(0.1)
+
+        # After max wait, proceed anyway - file should exist
+        return os.path.exists(filepath)
+
     def cleanup_old_files(self):
         """Clean up old files that might have accumulated."""
         try:
@@ -95,6 +122,31 @@ class FileManager:
         except Exception as e:
             self.debug_log("session", f"❌ Failed to get file info for {filepath}: {e}")
             return None
+
+    def _wait_for_file_stable(self, filepath, max_wait=5.0):
+        """Wait for a file to become stable (not being written to)."""
+        import time
+
+        start_time = time.time()
+        last_size = -1
+
+        while time.time() - start_time < max_wait:
+            try:
+                if not os.path.exists(filepath):
+                    time.sleep(0.1)
+                    continue
+
+                current_size = os.path.getsize(filepath)
+                if current_size == last_size and current_size > 0:
+                    # File size hasn't changed, likely stable
+                    return True
+
+                last_size = current_size
+                time.sleep(0.2)
+            except OSError:
+                time.sleep(0.1)
+
+        return os.path.exists(filepath) and os.path.getsize(filepath) > 0
 
     def move_session_files_to_network(
         self,
@@ -202,11 +254,44 @@ class FileManager:
                     self.debug_log("migrate", f"❌ Source video missing: {src}")
                     continue
 
+                # For video files, wait briefly for file to stabilize (audio muxing completion)
+                self._wait_for_video_ready(src)
+
+                # Get source file size before moving
+                src_size = os.path.getsize(src)
+
                 # Try direct move first
                 shutil.move(src, dest)
-                self.debug_log(
-                    "migrate", f"✅ MOVED video {os.path.basename(src)} -> {dest}"
-                )
+
+                # Verify the destination file exists and has correct size
+                if os.path.exists(dest):
+                    dest_size = os.path.getsize(dest)
+                    if dest_size == src_size:
+                        self.debug_log(
+                            "migrate",
+                            f"✅ MOVED video {os.path.basename(src)} -> {dest} ({dest_size} bytes)",
+                        )
+                        print(
+                            f"[DEBUG] Video moved successfully: {dest} ({dest_size} bytes)"
+                        )
+                    else:
+                        self.debug_log(
+                            "migrate",
+                            f"⚠️ Size mismatch: {os.path.basename(src)} src={src_size} dest={dest_size}",
+                        )
+                        print(
+                            f"[WARNING] Video size mismatch after move: {src_size} -> {dest_size}"
+                        )
+                else:
+                    self.debug_log(
+                        "migrate",
+                        f"❌ Move appeared successful but dest file missing: {dest}",
+                    )
+                    print(
+                        f"[ERROR] Video move failed - destination file missing: {dest}"
+                    )
+                    raise Exception(f"Destination file missing after move: {dest}")
+
                 moved_files.append(src)
             except Exception as move_error:
                 try:

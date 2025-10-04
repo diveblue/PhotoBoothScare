@@ -1,896 +1,663 @@
+"""""""""
+
+PhotoBooth Main - Application startup and dependency injection
+
+PhotoBooth Main - Application startup and dependency injectionPhotoBooth Main - Application startup and dependency injection
+
+This is the main entry point that creates all managers and shared objects.
+
+Goal: Replace ActionHandler's setup_and_run() and move toward clean separation.
+
+"""
+
+This is the main entry point that creates all managers and shared objects.This is the main entry point that creates all managers and shared objects.
+
 import os
-import stat
-import platform
-import sys
-import argparse
-import time
-import cv2
-import pygame
+
+import statGoal: Replace ActionHandler's setup_and_run() and move toward clean separation.Goal: Replace ActionHandler's setup_and_run() and move toward clean separation.
+
 import json
 
-from photobooth.managers.camera_manager import CameraManager
+import argparse""""""
+
+import sys
+
+import platform
+
+
+
+from photobooth.utils.thread_safe_display_state import ThreadSafeDisplayStateimport osim    except KeyboardInterrupt:
+
+from photobooth.managers.session_manager import SessionManager
+
+from photobooth.managers.camera_manager import CameraManagerimport stat        print("🛑 Interrupted by user")
+
 from photobooth.hardware.gpio_manager import GPIOManager
-from photobooth.managers.audio_manager import AudioManager
+
+from photobooth.managers.audio_manager import AudioManagerimport json    finally:
+
 from photobooth.ui.overlay_renderer import OverlayRenderer
-from photobooth.utils.photobooth_state import PhotoBoothState
-from photobooth.managers.rtsp_camera_manager import (
-    RTSPCameraManager,
-    get_rtsp_url_onvif,
-)
-from photobooth.managers.file_manager import FileManager
-from photobooth.managers.video_manager import VideoManager
+
+from photobooth.managers.video_manager import VideoManagerimport argparse        print("🔧 Shutting down...")
+
 from photobooth.managers.photo_capture_manager import PhotoCaptureManager
-from photobooth.managers.qr_display_manager import QRDisplayManager
-from photobooth.managers.countdown_manager import CountdownManager
-from photobooth.managers.gotcha_manager import GotchaManager
-from photobooth.managers.keyboard_input_manager import KeyboardInputManager
 
-# ---- Parse Command Line Arguments ----
-parser = argparse.ArgumentParser(description="PhotoBooth Scare Application")
-parser.add_argument("--debug", "-d", action="store_true", help="Enable debug output")
-parser.add_argument(
-    "--windowed",
-    "-w",
-    action="store_true",
-    help="Run in windowed mode (not fullscreen)",
-)
-args = parser.parse_args()
+from photobooth.ui.video_renderer import VideoRendererimport sys        shutdown_event.set()
 
-# ---- Load Config ----
-with open("config.json", "r") as f:
-    CONFIG = json.load(f)
+from photobooth.ui.camera_controls import CameraControls
 
-BUTTON_PIN = CONFIG["BUTTON_PIN"]
-RELAY_PIN = CONFIG["RELAY_PIN"]
-COUNTDOWN_SECONDS = CONFIG["COUNTDOWN_SECONDS"]
-WINDOW_NAME = CONFIG["WINDOW_NAME"]
-USE_WEBCAM = CONFIG["USE_WEBCAM"]
-TEST_VIDEO_PATH = CONFIG["TEST_VIDEO_PATH"]
-PHOTO_DIR = CONFIG["PHOTO_DIR"]
-VIDEO_DIR = CONFIG["VIDEO_DIR"]
-FONT_PATH = CONFIG["FONT_PATH"]
-FONT_SIZE = CONFIG["FONT_SIZE"]
-OVERLAY_GOTCHA_TEXT = CONFIG["OVERLAY_GOTCHA_TEXT"]
-OVERLAY_IDLE_TEXT = CONFIG["OVERLAY_IDLE_TEXT"]
-RTSP_URL = CONFIG["RTSP_URL"]
-RTSP_VIDEO_FPS = CONFIG["RTSP_VIDEO_FPS"]
-PYGAME_DRIVERS = CONFIG["PYGAME_DRIVERS"]
-CAM_RESOLUTION_LOW = tuple(CONFIG["CAM_RESOLUTION_LOW"])
-CAM_RESOLUTION_HIGH = tuple(CONFIG["CAM_RESOLUTION_HIGH"])
-QR_DISPLAY_SECONDS = CONFIG.get("QR_DISPLAY_SECONDS", 5.0)
-
-# Lighting configuration
-LIGHTING_MODE = CONFIG.get("LIGHTING_MODE", "TESTING")
-CAMERA_SETTINGS = CONFIG.get("CAMERA_SETTINGS", {})
-LIGHTING_CONFIG = CAMERA_SETTINGS.get(LIGHTING_MODE, {})
-LIGHTING_CONFIG["_mode"] = LIGHTING_MODE  # Add mode indicator for logging
-
-# Debug configuration - command line overrides config
-DEBUG_ENABLED = args.debug or CONFIG.get("DEBUG_ENABLED", False)
-DEBUG_TIMING = DEBUG_ENABLED or CONFIG.get("DEBUG_TIMING", False)
-DEBUG_AUDIO = DEBUG_ENABLED or CONFIG.get("DEBUG_AUDIO", False)
-DEBUG_GPIO = DEBUG_ENABLED or CONFIG.get("DEBUG_GPIO", False)
-DEBUG_CAMERA = DEBUG_ENABLED or CONFIG.get("DEBUG_CAMERA", False)
-
-IS_LINUX = platform.system() == "Linux"
-HAS_DISPLAY_SERVER = bool(
-    os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
-)
+from photobooth.ui.settings_overlay import SettingsOverlayimport platform        video_renderer.cleanup()
 
 
-# Debug helper function
+
+import time        print("🔧 Cleanup complete")stat
+
 def debug_log(category, message):
-    """Log debug messages with timestamp if debugging is enabled"""
-    if not DEBUG_ENABLED:
-        return
 
-    # Check specific debug categories
-    if category == "timing" and not DEBUG_TIMING:
-        return
-    elif category == "audio" and not DEBUG_AUDIO:
-        return
-    elif category == "gpio" and not DEBUG_GPIO:
-        return
-    elif category == "camera" and not DEBUG_CAMERA:
-        return
+    """Simple debug logging function"""import json
 
-    timestamp = time.strftime("%H:%M:%S.%f")[:-3]  # HH:MM:SS.mmm
-    print(f"[{timestamp}] [{category.upper()}] {message}")
+    print(f"[{category.upper()}] {message}")
+
+from photobooth.utils.thread_safe_display_state import ThreadSafeDisplayStateimport argparse
 
 
-SSH_SESSION = bool(os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY"))
-ON_CONSOLE_VT = (
-    IS_LINUX and not HAS_DISPLAY_SERVER and not SSH_SESSION and sys.stdout.isatty()
-)
-USE_PYGAME_DISPLAY = (
-    os.environ.get("USE_PYGAME_DISPLAY")
-    or ("1" if (ON_CONSOLE_VT or IS_LINUX) else "0")
-) != "0"
-if IS_LINUX:
-    os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
 
-# Always use low resolution for performance on Pi
-CAM_RESOLUTION = CAM_RESOLUTION_LOW
+def check_user_and_permissions():from photobooth.managers.session_manager import SessionManagerimport sys
 
-print(
-    f"[ENV] IS_LINUX={IS_LINUX} HAS_DISPLAY_SERVER={HAS_DISPLAY_SERVER} SSH_SESSION={SSH_SESSION} ON_CONSOLE_VT={ON_CONSOLE_VT} USE_PYGAME_DISPLAY={USE_PYGAME_DISPLAY}"
-)
+    """Check if we're running as expected user and have necessary permissions."""
+
+from photobooth.managers.camera_manager import CameraManagerimport platform
+
+    if platform.system() == "Linux":
+
+        import pwdfrom photobooth.hardware.gpio_manager import GPIOManagerimport time
 
 
-def main():
-    # Session state variables
-    files_moved_to_network = False
-    qr_img = None
-    qr_h, qr_w = 0, 0
-    """
-    Main orchestration function for the PhotoBoothScare application.
-    Initializes all managers and runs the main event loop.
-    """
 
-    # Fix XDG runtime dir permissions on Linux to avoid Qt/libcamera warnings and preview instability
-    if IS_LINUX:
-        try:
-            uid = os.getuid()
-            default_runtime = f"/run/user/{uid}"
-            xr = os.environ.get("XDG_RUNTIME_DIR", default_runtime)
-            # Ensure dir exists
-            if not os.path.isdir(xr):
-                try:
-                    os.makedirs(xr, exist_ok=True)
-                except Exception:
-                    # fallback to /tmp if /run is managed by systemd
-                    xr = f"/tmp/runtime-{uid}"
-                    os.makedirs(xr, exist_ok=True)
-                    os.environ["XDG_RUNTIME_DIR"] = xr
-            # Ensure 0700 perms
-            st = os.stat(xr)
-            mode = stat.S_IMODE(st.st_mode)
-            if mode != 0o700:
-                try:
-                    os.chmod(xr, 0o700)
-                except Exception:
-                    pass
-            # Ensure ownership
-            try:
-                if st.st_uid != uid:
-                    os.chown(xr, uid, -1)
-            except Exception:
-                # chown may not be permitted; best effort only
-                pass
-        except Exception:
-            pass
+        # Get current user infofrom photobooth.managers.audio_manager import AudioManager
 
-    # Initialize managers
-    camera = CameraManager(CAM_RESOLUTION, TEST_VIDEO_PATH, USE_WEBCAM, LIGHTING_CONFIG)
-    gpio = GPIOManager(BUTTON_PIN, RELAY_PIN)
-    audio = AudioManager(debug=DEBUG_AUDIO)
-    overlay = OverlayRenderer(
-        FONT_PATH, FONT_SIZE, OVERLAY_GOTCHA_TEXT, OVERLAY_IDLE_TEXT
-    )
+        current_user = pwd.getpwuid(os.getuid()).pw_name
 
-    # Initialize file manager
-    file_manager = FileManager(CONFIG, debug_log)
+from photobooth.ui.overlay_renderer import OverlayRendererfrom photobooth.utils.thread_safe_display_state import ThreadSafeDisplayState
 
-    # Initialize video manager
-    video_manager = VideoManager(CONFIG, debug_log)
+        # Only enforce user check on Raspberry Pi (has /boot/config.txt)
 
-    # Initialize photo capture manager
-    photo_manager = PhotoCaptureManager(CONFIG, debug_log)
+        if os.path.exists("/boot/config.txt"):from photobooth.managers.video_manager import VideoManagerfrom photobooth.managers.session_manager import SessionManager
 
-    # Initialize QR display manager
-    qr_manager = QRDisplayManager(CONFIG, debug_log)
+            expected_users = ["pi", "scott"]
 
-    # Initialize countdown manager
-    countdown_manager = CountdownManager(CONFIG, debug_log)
+            if current_user not in expected_users:from photobooth.managers.photo_capture_manager import PhotoCaptureManagerfrom photobooth.managers.camera_manager import CameraManager
 
-    # Initialize gotcha manager
-    gotcha_manager = GotchaManager(CONFIG, debug_log)
+                print(
 
-    # Initialize state (can be replaced by session_manager.state in future)
-    state = PhotoBoothState()
+                    f"⚠️ Running as '{current_user}'. Expected: {expected_users}. May encounter permission issues."from photobooth.ui.video_renderer import VideoRendererfrom photobooth.hardware.gpio_manager import GPIOManager
 
-    # Output directories
-    # Network (NAS) paths -- where files will finally live (from config, adapted per platform)
-    network_photo_dir = CONFIG.get(
-        "NETWORK_PHOTO_DIR", "\\\\SKYNAS\\web\\Halloween2025\\media\\photos"
-    )
-    network_video_dir = CONFIG.get(
-        "NETWORK_VIDEO_DIR", "\\\\SKYNAS\\web\\Halloween2025\\media\\videos"
-    )
+                )
 
-    # Adapt network paths for Linux (convert UNC to mount points)
-    if IS_LINUX:
-        if network_photo_dir.startswith("\\\\"):
-            network_photo_dir = network_photo_dir.replace(
-                "\\\\SKYNAS", "/mnt/skynas"
-            ).replace("\\", "/")
-        if network_video_dir.startswith("\\\\"):
-            network_video_dir = network_video_dir.replace(
-                "\\\\SKYNAS", "/mnt/skynas"
-            ).replace("\\", "/")
+from photobooth.ui.camera_controls import CameraControlsfrom photobooth.managers.audio_manager import AudioManager
 
-    # Local paths from config (these are the working directories during capture)
-    local_photo_dir = CONFIG.get("PHOTO_DIR", "./local_photos")
-    local_video_dir = CONFIG.get("VIDEO_DIR", "./local_videos")
+        # Check XDG_RUNTIME_DIR for audio/video access
 
-    # On Linux, use local paths for capture, then copy to network during QR display
-    if IS_LINUX:
-        photo_dir = local_photo_dir
-        video_dir = local_video_dir
-    else:
-        # Non-Linux (development host) write directly to network paths
-        photo_dir = network_photo_dir
-        video_dir = network_video_dir
+        uid = os.getuid()from photobooth.ui.settings_overlay import SettingsOverlayfrom photobooth.ui.overlay_renderer import OverlayRenderer
 
-    # Log directory configuration for debugging
-    debug_log("migrate", "📁 Directory configuration:")
-    debug_log("migrate", f"   Local photos:  {local_photo_dir}")
-    debug_log("migrate", f"   Local videos:  {local_video_dir}")
-    debug_log("migrate", f"   Network photos: {network_photo_dir}")
-    debug_log("migrate", f"   Network videos: {network_video_dir}")
-    debug_log(
-        "migrate",
-        f"   Active photos:  {photo_dir} ({'local' if photo_dir == local_photo_dir else 'network'})",
-    )
-    debug_log(
-        "migrate",
-        f"   Active videos:  {video_dir} ({'local' if video_dir == local_video_dir else 'network'})",
-    )
+        default_runtime = f"/run/user/{uid}"
 
-    # Ensure local and network directories exist where feasible
-    for d in (local_photo_dir, local_video_dir, network_photo_dir, network_video_dir):
-        try:
-            os.makedirs(d, exist_ok=True)
-            debug_log("migrate", f"✅ Directory ready: {d}")
-        except Exception as e:
-            # best-effort only; failures for network dirs are acceptable at startup
-            debug_log("migrate", f"❌ Directory failed: {d} - {e}")
-            pass
+        xr = os.environ.get("XDG_RUNTIME_DIR", default_runtime)from photobooth.managers.video_manager import VideoManager
 
-    # Try to initialize RTSP secondary camera manager if RTSP_URL present
-    if RTSP_URL:
-        try:
-            # Health-check / reconnection settings
-            rtsp_check_interval = float(CONFIG.get("RTSP_CHECK_INTERVAL", 5.0))
-            rtsp_last_check = 0.0
-            rtsp_retries = 0
-            rtsp_max_retries = int(CONFIG.get("RTSP_MAX_RETRIES", 6))
-            if RTSP_URL.startswith("onvif://"):
-                # onvif://username:password@ip
-                from urllib.parse import urlparse
 
-                p = urlparse(RTSP_URL)
-                net = p.netloc  # may contain user:pass@host
-                if "@" in net:
-                    creds, host = net.split("@", 1)
-                    if ":" in creds:
-                        user, pwd = creds.split(":", 1)
-                    else:
-                        user, pwd = creds, ""
-                else:
-                    host = net
-                    user, pwd = "", ""
-                print(f"[RTSP] Fetching RTSP URL from ONVIF on {host}...")
-                fetched = get_rtsp_url_onvif(host, user, pwd)
-                if fetched:
-                    try:
-                        rtsp_manager = RTSPCameraManager(
-                            fetched,
-                            os.path.join(
-                                video_dir, f"rtsp_secondary_{int(time.time())}.mp4"
-                            ),
-                            RTSP_VIDEO_FPS,
-                        )
-                        rtsp_manager.start()
-                        rtsp_status = "ONLINE"
-                        print("[RTSP] Secondary RTSP stream started via ONVIF.")
-                    except Exception as e:
-                        print(
-                            f"[RTSP] Failed to start RTSP manager with fetched URL: {e}"
-                        )
-                        rtsp_manager = None
-                        rtsp_status = "OFFLINE"
-                else:
-                    print("[RTSP] Could not fetch RTSP URL via ONVIF; leaving offline.")
-                    rtsp_status = "OFFLINE"
-            else:
-                # Try to use RTSP_URL directly (inject credentials if present in config)
-                try:
-                    rtsp_to_use = RTSP_URL
-                    try:
-                        # If URL lacks credentials, and config provides them, inject
-                        from urllib.parse import urlparse, urlunparse
 
-                        p = urlparse(RTSP_URL)
-                        if p.username is None and CONFIG.get("RTSP_USER"):
-                            netloc = f"{CONFIG.get('RTSP_USER')}:{CONFIG.get('RTSP_PASS', '')}@{p.hostname}"
-                            if p.port:
-                                netloc += f":{p.port}"
-                            rtsp_to_use = urlunparse(
-                                (
-                                    p.scheme,
-                                    netloc,
-                                    p.path or "",
-                                    p.params or "",
-                                    p.query or "",
-                                    p.fragment or "",
-                                )
-                            )
-                    except Exception:
-                        pass
+        if not os.path.exists(xr):from photobooth.managers.photo_capture_manager import PhotoCaptureManager
 
-                    rtsp_manager = RTSPCameraManager(
-                        rtsp_to_use,
-                        os.path.join(
-                            video_dir, f"rtsp_secondary_{int(time.time())}.mp4"
-                        ),
-                        RTSP_VIDEO_FPS,
-                    )
-                    rtsp_manager.start()
-                    rtsp_status = "ONLINE"
-                    print("[RTSP] Secondary RTSP stream started.")
-                except Exception as e:
-                    print(f"[RTSP] Failed to start RTSP manager: {e}")
-                    rtsp_manager = None
-                    rtsp_status = "OFFLINE"
-        except Exception as e:
-            print(f"[RTSP] Initialization error: {e}")
-            rtsp_manager = None
-            rtsp_status = "OFFLINE"
+            print(f"⚠️ {xr} doesn't exist. Creating it...")
 
-    # Display setup
-    screen = None
-    screen_size = None
-    if USE_PYGAME_DISPLAY:
-        # Try X11 first on Linux with display server, then framebuffer drivers
-        if IS_LINUX and HAS_DISPLAY_SERVER:
-            drivers_to_try = ["x11", "kmsdrm", "fbcon", "directfb"]
-        else:
-            drivers_to_try = ["kmsdrm", "fbcon", "directfb", "svgalib"]
-        for drv in drivers_to_try:
-            try:
-                os.environ["SDL_VIDEODRIVER"] = drv
-                if not pygame.get_init():
-                    pygame.init()
-                else:
-                    pygame.display.quit()
-                pygame.display.init()
-                info = pygame.display.Info()
+            try:def debug_log(category, message):from photobooth.ui.video_renderer import VideoRenderer
 
-                if args.windowed:
-                    # Windowed mode for development
-                    screen_size = (1024, 768)
-                    screen = pygame.display.set_mode(screen_size, 0)
-                    pygame.mouse.set_visible(True)
-                    pygame.display.set_caption("PhotoBooth Scare - Development Mode")
-                    print(
-                        f"[INFO] Pygame windowed mode with driver '{drv}' -> {screen_size}"
-                    )
-                else:
-                    # Fullscreen mode for production
-                    screen_size = (info.current_w, info.current_h)
-                    screen = pygame.display.set_mode(screen_size, pygame.FULLSCREEN)
-                    pygame.mouse.set_visible(False)
-                    print(
-                        f"[INFO] Pygame fullscreen with driver '{drv}' -> {screen_size}"
-                    )
-                break
+                os.makedirs(xr, mode=0o700)
+
+                os.chown(xr, uid, -1)    """Simple debug logging function"""from photobooth.ui.camera_controls import CameraControls
+
+                os.environ["XDG_RUNTIME_DIR"] = xr
+
+                print(f"✅ Created {xr}")    print(f"[{category.upper()}] {message}")from photobooth.ui.settings_overlay import SettingsOverlay
+
             except Exception as e:
-                print(f"[WARN] Driver '{drv}' failed: {e}")
-                screen = None
-        if screen is None:
-            print(
-                "[ERROR] No suitable SDL framebuffer driver worked; no live preview will show."
-            )
-            try:
-                cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-                if not args.windowed:
-                    # Try to make OpenCV window fullscreen
-                    try:
-                        cv2.setWindowProperty(
-                            WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN
-                        )
-                        cv2.moveWindow(WINDOW_NAME, 0, 0)
-                    except Exception:
-                        pass
-                else:
-                    # Windowed mode - resize to development size
-                    try:
-                        cv2.resizeWindow(WINDOW_NAME, 1024, 768)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-    else:
-        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-        if not args.windowed:
-            # Try to make OpenCV window fullscreen
-            try:
-                cv2.setWindowProperty(
-                    WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN
-                )
-                cv2.moveWindow(WINDOW_NAME, 0, 0)
-            except Exception:
-                pass
+
+                print(f"❌ Failed to create {xr}: {e}")
+
         else:
-            # Windowed mode - resize to development size
+
+            # Ensure correct permissions
+
             try:
-                cv2.resizeWindow(WINDOW_NAME, 1024, 768)
-            except Exception:
-                pass
 
-    print("Controls:")
-    print("  SPACE = simulate button press, Q/ESC/F11 = quit")
-    print(
-        "  Camera Settings: W(WB mode), B(brightness ±), C(contrast ±), S(saturation ±)"
-    )
-    print("  E(exposure ±), G(gain ±), N(noise reduction), R(reset to defaults)")
-    print("  H = show this help again")
+                current_stat = os.stat(xr)def check_user_and_permissions():def debug_log(category, message):
 
-    # Camera settings now handled by CameraControls class
+                expected_mode = stat.S_IMODE(current_stat.st_mode)
 
-    # wb_modes now handled by CameraControls class
+                if expected_mode != 0o700:    """Check if we're running as expected user and have necessary permissions."""    """Simple debug logging function"""
 
-    # Initialize camera controls and settings overlay
-    from photobooth.ui.camera_controls import CameraControls
-    from photobooth.ui.settings_overlay import SettingsOverlay
+                    os.chmod(xr, 0o700)
 
-    settings_overlay = SettingsOverlay()
-    camera_controls = CameraControls(camera, LIGHTING_CONFIG, settings_overlay)
+                    os.chown(xr, uid, -1)    print(f"[{category.upper()}] {message}")
 
-    # Initialize keyboard input manager
-    keyboard_input = KeyboardInputManager(camera_controls, debug_log)
+                    print(f"🔧 Fixed permissions on {xr}")
 
-    # Removed duplicate camera control functions - using CameraControls class instead
+            except Exception as e:    if platform.system() == "Linux":
 
-    # Camera controls now handled by CameraControls class
+                print(f"⚠️ Permission check failed for {xr}: {e}")
 
-    # Settings overlay now handled by SettingsOverlay class
+        import pwd
 
-    # Non-blocking state machine
-    # Countdown now handled by CountdownManager
-    # Gotcha now handled by GotchaManager
-    # Photo capture now handled by PhotoCaptureManager
 
-    def start_countdown():
-        nonlocal files_moved_to_network
-        if countdown_manager.start_countdown(audio, gpio):
-            state.start_countdown(COUNTDOWN_SECONDS)
-            files_moved_to_network = False
-            photo_manager.reset()  # Reset photo capture state
-            gotcha_manager.reset()  # Reset gotcha state
 
-    def button_callback(_pin):
-        debug_log("gpio", f"Hardware button callback triggered (pin {_pin})")
-        start_countdown()
+def main():def load_config():
 
-    gpio.add_event_detect(button_callback)
+    # Parse command-line arguments
+
+    parser = argparse.ArgumentParser(description="PhotoBooth Application")        # Get current user info    """Load configuration from config.json"""
+
+    parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode")
+
+    parser.add_argument(        current_user = pwd.getpwuid(os.getuid()).pw_name    with open("config.json", "r") as f:
+
+        "--windowed", "-w", action="store_true", help="Run in windowed mode"
+
+    )        return json.load(f)
+
+    args = parser.parse_args()
+
+        # Only enforce user check on Raspberry Pi (has /boot/config.txt)
+
+    # Check system permissions
+
+    check_user_and_permissions()        if os.path.exists("/boot/config.txt"):
+
+
+
+    print("🚀 PhotoBooth starting up...")            expected_users = ["pi", "scott"]def setup_linux_runtime():
+
+
+
+    # Load configuration            if current_user not in expected_users:    """Fix XDG runtime dir permissions on Linux"""
+
     try:
-        while True:
-            frame = camera.get_frame()
-            if frame is None:
-                continue
-            frame = cv2.flip(frame, 1)
 
-            now = time.time()
-            # Handle countdown state machine
-            if state.countdown_active:
-                # Start video recording if not already
-                if not video_manager.recording:
-                    height, width = frame.shape[:2]
-                    # Use actual frame dimensions for video
-                    video_size = (width, height)
-                    video_manager.start_recording(
-                        state.session_id, state.session_time, video_size
-                    )
-                # Update countdown and handle beeps
-                countdown_info = countdown_manager.update(audio)
-                if countdown_info:
-                    state.countdown_number = countdown_info["countdown_number"]
-                    elapsed = countdown_info["elapsed"]
-                    # After countdown, show SMILE!
-                    if countdown_info["countdown_finished"]:
-                        state.countdown_number = None
-                        # Start SMILE phase and play shutter sound once
-                        photo_manager.start_smile_phase(audio)
+        with open("config.json", "r") as f:                print(    if platform.system() != "Linux":
 
-                        # Take multiple SMILE photos using photo manager
-                        if (
-                            not photo_manager.is_complete()
-                            and photo_manager.should_take_photo(now)
-                        ):
-                            photo_manager.capture_photo(
-                                frame, state.session_time, state.session_id, now
-                            )
+            config = json.load(f)
 
-                        # Check if ready for gotcha phase (all photos taken + pause)
-                        if gotcha_manager.should_trigger_gotcha(
-                            photo_manager, elapsed, COUNTDOWN_SECONDS
-                        ):
-                            gotcha_manager.trigger_gotcha(state, 10)
-                # Update gotcha and check for completion
-                gotcha_info = gotcha_manager.update(state)
-                if gotcha_info and gotcha_info["completed"]:
-                    # Stop video recording NOW - before file movement during QR display
-                    if video_manager.recording:
-                        video_manager.stop_recording()
+        print("✅ Configuration loaded")                    f"⚠️ Running as '{current_user}'. Expected: {expected_users}. May encounter permission issues."        return
 
-                    # Start QR display phase
-                    if not qr_manager.is_active():
-                        qr_result = qr_manager.start_display(state.session_id)
-                        if qr_result and qr_result["success"]:
-                            if qr_result["dimensions"]:
-                                qr_w, qr_h = qr_result["dimensions"]
-                                qr_img = cv2.imread(qr_result["qr_path"])
+    except FileNotFoundError:
 
-                    # Handle file movement during QR display (responsibility of file manager)
-                    if not files_moved_to_network and IS_LINUX:
-                        try:
-                            debug_log(
-                                "timing",
-                                "📁 MOVING FILES to web server during QR display",
-                            )
+        print("❌ config.json not found")                )
 
-                            # First, cleanup any old sessions that might still be in local directories
-                            current_session_prefix = (
-                                f"{state.session_time}_{state.session_id}_"
-                            )
-                            old_files_moved = file_manager.cleanup_old_local_sessions(
-                                local_photo_dir,
-                                local_video_dir,
-                                network_photo_dir,
-                                network_video_dir,
-                                exclude_current_session=current_session_prefix,
-                            )
+        sys.exit(1)
 
-                            # Then move current session files
-                            files_moved = file_manager.move_session_files_to_network(
-                                state.session_time,
-                                state.session_id,
-                                local_photo_dir,
-                                local_video_dir,
-                                network_photo_dir,
-                                network_video_dir,
-                            )
-                            if files_moved >= 0:  # Success (even if 0 files)
-                                files_moved_to_network = True
-                                total_moved = files_moved + old_files_moved
-                                debug_log(
-                                    "timing",
-                                    f"✅ Moved {files_moved} current + {old_files_moved} old = {total_moved} total files to web server",
-                                )
-                        except Exception as e:
-                            debug_log(
-                                "timing", f"❌ FILE MOVE failed during QR display: {e}"
-                            )
-                # End QR display after configured time
-                # Update QR code display timing
-                qr_manager.update(now)
-                status = qr_manager.get_display_status(now)
-                if status and status["active"]:
-                    debug_log(
-                        "timing",
-                        f"🔄 QR display active for {status['elapsed']:.1f}s / {status['duration']:.1f}s",
-                    )
+    except json.JSONDecodeError as e:    try:
 
-                if qr_manager.is_complete(now):
-                    debug_log("timing", "🏁 SESSION COMPLETE - Returning to IDLE state")
-                    state.countdown_active = False
-                    state.gotcha_active = False  # <- FIX: Also reset gotcha state
-                    files_moved_to_network = False
-                    countdown_manager.reset()  # Reset countdown state
-                    gotcha_manager.reset()  # Reset gotcha state
-                    photo_manager.reset()  # Reset photo capture state
-                    qr_manager.reset()  # Reset QR display state
+        print(f"❌ Invalid JSON in config.json: {e}")
 
-            # Write frame to video if recording (should stop before QR display)
-            if video_manager.recording:
-                video_manager.write_frame(frame)
+        sys.exit(1)        # Check XDG_RUNTIME_DIR for audio/video access        uid = os.getuid()
 
-                # Video recording is now stopped earlier when gotcha completes
-                # This ensures files can be moved during QR display without corruption
 
-                # Draw overlay
-                # Periodic RTSP health check and reconnect
-                try:
-                    if now - rtsp_last_check >= rtsp_check_interval:
-                        rtsp_last_check = now
-                        alive = False
-                        if rtsp_manager is not None:
-                            try:
-                                cap = getattr(rtsp_manager, "cap", None)
-                                if (
-                                    cap is not None
-                                    and hasattr(cap, "isOpened")
-                                    and cap.isOpened()
-                                ):
-                                    alive = True
-                                elif (
-                                    hasattr(rtsp_manager, "is_recording")
-                                    and rtsp_manager.is_recording()
-                                ):
-                                    alive = True
-                            except Exception:
-                                alive = False
-                        if not alive:
-                            rtsp_retries += 1
-                            print(
-                                f"[RTSP] Stream not healthy, attempt {rtsp_retries}/{rtsp_max_retries}"
-                            )
-                            # Stop existing manager if present
-                            try:
-                                if rtsp_manager is not None:
-                                    rtsp_manager.stop()
-                            except Exception:
-                                pass
-                            rtsp_manager = None
-                            # Try to obtain a usable RTSP URL
-                            rtsp_candidate = None
-                            try:
-                                if RTSP_URL.startswith("onvif://"):
-                                    # parse host/creds
-                                    from urllib.parse import urlparse
 
-                                    p = urlparse(RTSP_URL)
-                                    net = p.netloc
-                                    if "@" in net:
-                                        creds, host = net.split("@", 1)
-                                        if ":" in creds:
-                                            user, pwd = creds.split(":", 1)
-                                        else:
-                                            user, pwd = creds, ""
-                                    else:
-                                        host = net
-                                        user, pwd = (
-                                            CONFIG.get("RTSP_USER", ""),
-                                            CONFIG.get("RTSP_PASS", ""),
-                                        )
-                                    fetched = get_rtsp_url_onvif(host, user, pwd)
-                                    if fetched:
-                                        rtsp_candidate = fetched
-                                else:
-                                    # inject credentials if missing
-                                    try:
-                                        from urllib.parse import urlparse, urlunparse
+    # Create shared objects        uid = os.getuid()        default_runtime = f"/run/user/{uid}"
 
-                                        p = urlparse(RTSP_URL)
-                                        rtsp_candidate = RTSP_URL
-                                        if p.username is None and CONFIG.get(
-                                            "RTSP_USER"
-                                        ):
-                                            netloc = f"{CONFIG.get('RTSP_USER')}:{CONFIG.get('RTSP_PASS', '')}@{p.hostname}"
-                                            if p.port:
-                                                netloc += f":{p.port}"
-                                            rtsp_candidate = urlunparse(
-                                                (
-                                                    p.scheme,
-                                                    netloc,
-                                                    p.path or "",
-                                                    p.params or "",
-                                                    p.query or "",
-                                                    p.fragment or "",
-                                                )
-                                            )
-                                    except Exception:
-                                        rtsp_candidate = RTSP_URL
-                                # If no candidate yet, try ONVIF using configured creds and host from RTSP_URL
-                                if not rtsp_candidate:
-                                    try:
-                                        from urllib.parse import urlparse
+    print("🔧 Creating shared objects...")
 
-                                        p = urlparse(RTSP_URL)
-                                        host = p.hostname or p.netloc
-                                        user = CONFIG.get("RTSP_USER", "")
-                                        pwd = CONFIG.get("RTSP_PASS", "")
-                                        if host and (user or pwd):
-                                            print(
-                                                f"[RTSP] Attempting ONVIF fetch on {host} during reconnect..."
-                                            )
-                                            fetched_fallback = get_rtsp_url_onvif(
-                                                host, user, pwd
-                                            )
-                                            if fetched_fallback:
-                                                rtsp_candidate = fetched_fallback
-                                    except Exception:
-                                        pass
-                            except Exception as e:
-                                print(f"[RTSP] Error preparing candidate URL: {e}")
-                                rtsp_candidate = None
+    try:        default_runtime = f"/run/user/{uid}"        xr = os.environ.get("XDG_RUNTIME_DIR", default_runtime)
 
-                            # Attempt to start manager if we have a candidate URL
-                            if rtsp_candidate:
-                                # Mark as connecting so overlay shows activity
-                                rtsp_status = "CONNECTING"
-                                # Lightweight probe: try to open a short cv2 cap and read a frame or two
-                                probe_ok = False
-                                try:
-                                    if cv2 is not None:
-                                        probe_cap = cv2.VideoCapture(rtsp_candidate)
-                                        t0 = time.time()
-                                        while time.time() - t0 < 2.0:
-                                            ret, _f = probe_cap.read()
-                                            if ret:
-                                                probe_ok = True
-                                                break
-                                            time.sleep(0.15)
-                                        try:
-                                            probe_cap.release()
-                                        except Exception:
-                                            pass
-                                    else:
-                                        # If no cv2 available, optimistically try to start manager
-                                        probe_ok = True
-                                except Exception:
-                                    probe_ok = False
+        display_state = ThreadSafeDisplayState()
 
-                                if not probe_ok:
-                                    print(
-                                        "[RTSP] Probe failed; skipping manager start for now."
-                                    )
-                                    rtsp_manager = None
-                                    rtsp_status = "OFFLINE"
-                                else:
-                                    try:
-                                        rtsp_manager = RTSPCameraManager(
-                                            rtsp_candidate,
-                                            os.path.join(
-                                                video_dir,
-                                                f"rtsp_secondary_{int(time.time())}.mp4",
-                                            ),
-                                            RTSP_VIDEO_FPS,
-                                        )
-                                        rtsp_manager.start()
-                                        rtsp_status = "ONLINE"
-                                        rtsp_retries = 0
-                                        print(
-                                            "[RTSP] Reconnected secondary RTSP stream."
-                                        )
-                                    except Exception as e:
-                                        print(f"[RTSP] Reconnect failed: {e}")
-                                        rtsp_manager = None
-                                        rtsp_status = "OFFLINE"
-                            else:
-                                rtsp_status = "OFFLINE"
-                            # If exceeded max retries, reset counter and wait longer
-                            if rtsp_retries >= rtsp_max_retries:
-                                rtsp_retries = 0
-                                rtsp_last_check = now + rtsp_check_interval * 4
-                except Exception:
-                    pass
-            frame = overlay.draw_overlay(frame, vars(state))
-            # Render RTSP status indicator in lower-right
-            try:
-                # Compute compact status text and color
-                # rtsp_status may be "ONLINE", "OFFLINE", "CONNECTING" or None
-                st = rtsp_status if isinstance(rtsp_status, str) else None
-                if st is None:
-                    # derive from manager health
-                    if (
-                        rtsp_manager
-                        and getattr(rtsp_manager, "is_recording", lambda: False)()
-                    ):
-                        st = "ONLINE"
-                    else:
-                        st = "OFFLINE"
+        print("✅ ThreadSafeDisplayState created")        xr = os.environ.get("XDG_RUNTIME_DIR", default_runtime)
 
-                if st == "ONLINE":
-                    # try to detect backend method (ffmpeg vs cv2)
-                    method = "ffmpeg" if getattr(rtsp_manager, "proc", None) else "cv2"
-                    status_text_compact = f"cam 2 connected: {method}"
-                    status_color = (0, 200, 0)
-                elif st == "CONNECTING":
-                    status_text_compact = "cam 2 connecting"
-                    status_color = (0, 200, 200)  # yellow-ish (cyan-ish on BGR)
-                else:
-                    status_text_compact = "cam 2 offline"
-                    status_color = (0, 0, 200)
 
-                frame = overlay.draw_rtsp_status(
-                    frame, status_text_compact, status_color
+
+        session_manager = SessionManager(        # Ensure dir exists
+
+            config, debug_log, display_state=display_state
+
+        )        if not os.path.exists(xr):        if not os.path.isdir(xr):
+
+        print("✅ SessionManager created with shared state")
+
+    except Exception as e:            print(f"⚠️ {xr} doesn't exist. Creating it...")            try:
+
+        print(f"❌ Shared object creation failed: {e}")
+
+        raise            try:                os.makedirs(xr, exist_ok=True)
+
+
+
+    # Initialize all managers                os.makedirs(xr, mode=0o700)            except Exception:
+
+    print("🔧 Initializing managers...")
+
+    try:                os.chown(xr, uid, -1)                xr = f"/tmp/runtime-{uid}"
+
+        lighting_config = config.get("LIGHTING_CONFIG", {})
+
+        camera = CameraManager(                os.environ["XDG_RUNTIME_DIR"] = xr                os.makedirs(xr, exist_ok=True)
+
+            config["CAM_RESOLUTION"],
+
+            config.get("TEST_VIDEO_PATH", 0),                print(f"✅ Created {xr}")                os.environ["XDG_RUNTIME_DIR"] = xr
+
+            config.get("USE_WEBCAM", True),
+
+            lighting_config,            except Exception as e:
+
+        )
+
+        print("✅ Camera manager initialized")                print(f"❌ Failed to create {xr}: {e}")        # Ensure 0700 perms
+
+
+
+        gpio = GPIOManager(config["BUTTON_PIN"], config["RELAY_PIN"], debug_log)        else:        st = os.stat(xr)
+
+        print("✅ GPIO manager initialized")
+
+            # Ensure correct permissions        mode = stat.S_IMODE(st.st_mode)
+
+        audio = AudioManager(debug=args.debug or config.get("DEBUG_AUDIO", False))
+
+        print("✅ Audio manager initialized")            try:        if mode != 0o700:
+
+
+
+        overlay = OverlayRenderer(                current_stat = os.stat(xr)            try:
+
+            config["FONT_PATH"],
+
+            config["FONT_SIZE"],                expected_mode = stat.S_IMODE(current_stat.st_mode)                os.chmod(xr, 0o700)
+
+            config["OVERLAY_GOTCHA_TEXT"],
+
+            config["OVERLAY_IDLE_TEXT"],                if expected_mode != 0o700:            except Exception:
+
+        )
+
+        print("✅ Overlay renderer initialized")                    os.chmod(xr, 0o700)                pass
+
+
+
+        video_manager = VideoManager(config, debug_log)                    os.chown(xr, uid, -1)
+
+        print("✅ Video manager initialized")
+
+                    print(f"🔧 Fixed permissions on {xr}")        # Ensure ownership
+
+        photo_manager = PhotoCaptureManager(config, debug_log)
+
+        print("✅ Photo manager initialized")            except Exception as e:        try:
+
+
+
+        # Camera control components                print(f"⚠️ Permission check failed for {xr}: {e}")            if st.st_uid != uid:
+
+        settings_overlay = SettingsOverlay()
+
+        camera_controls = CameraControls(camera, lighting_config, settings_overlay)                os.chown(xr, uid, -1)
+
+        print("✅ Camera controls initialized")
+
+        except Exception:
+
+    except Exception as e:
+
+        print(f"❌ Manager initialization failed: {e}")def main():            pass
+
+        raise
+
+    # Parse command-line arguments    except Exception:
+
+    # Create VideoRenderer with shared state
+
+    print("🔧 Creating VideoRenderer...")    parser = argparse.ArgumentParser(description="PhotoBooth Application")        pass
+
+    try:
+
+        video_renderer = VideoRenderer(    parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode")
+
+            display_state=display_state,
+
+            camera_manager=camera,    parser.add_argument(
+
+            overlay_renderer=overlay,
+
+            config=config,        "--windowed", "-w", action="store_true", help="Run in windowed mode"def main():
+
+            camera_controls=camera_controls,
+
+            settings_overlay=settings_overlay,    )    """Main application entry point - creates all objects and starts the application"""
+
+        )
+
+        print("✅ VideoRenderer created")    args = parser.parse_args()    print("🚀 PhotoBooth starting up...")
+
+    except Exception as e:
+
+        print(f"❌ VideoRenderer creation failed: {e}")
+
+        raise
+
+    # Check system permissions    # Parse arguments
+
+    print("🎮 Starting application with threaded VideoRenderer...")
+
+    check_user_and_permissions()    parser = argparse.ArgumentParser(description="PhotoBooth Scare Application")
+
+    # Start VideoRenderer in its own thread
+
+    import threading    parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode")
+
+
+
+    try:    print("🚀 PhotoBooth starting up...")    parser.add_argument(
+
+        # Start video rendering thread
+
+        print("🎬 Starting video rendering thread...")        "--windowed", "-w", action="store_true", help="Run in windowed mode"
+
+        video_thread = threading.Thread(
+
+            target=video_renderer.run_continuous_loop, name="VideoRenderer"    # Load configuration    )
+
+        )
+
+        video_thread.daemon = True  # Thread will exit when main program exits    try:    args = parser.parse_args()
+
+        video_thread.start()
+
+        print("✅ Video thread started")        with open("config.json", "r") as f:
+
+
+
+        # Main thread just waits (for now - will handle countdown logic later)            config = json.load(f)    # Load configuration
+
+        print("⏳ Main thread waiting... Press Ctrl+C to quit")
+
+        while True:        print("✅ Configuration loaded")    config = load_config()
+
+            import time
+
+            time.sleep(1)  # Sleep 1 second between checks    except FileNotFoundError:
+
+
+
+    except KeyboardInterrupt:        print("❌ config.json not found")    # Setup Linux runtime
+
+        print("🛑 Interrupted by user")
+
+    finally:        sys.exit(1)    setup_linux_runtime()
+
+        print("🔧 Shutting down...")
+
+        video_renderer.cleanup()    except json.JSONDecodeError as e:
+
+        print("🔧 Cleanup complete")
+
+        print(f"❌ Invalid JSON in config.json: {e}")    # Extract config values
+
+
+
+if __name__ == "__main__":        sys.exit(1)    cam_resolution = tuple(config["CAM_RESOLUTION_HIGH"])
+
+    main()
+    lighting_mode = config.get("LIGHTING_MODE", "TESTING")
+
+    # Create shared objects    camera_settings = config.get("CAMERA_SETTINGS", {})
+
+    print("🔧 Creating shared objects...")    lighting_config = camera_settings.get(lighting_mode, {})
+
+    try:    lighting_config["_mode"] = lighting_mode
+
+        display_state = ThreadSafeDisplayState()
+
+        print("✅ ThreadSafeDisplayState created")    print("🔧 Creating shared objects...")
+
+
+
+        session_manager = SessionManager(    # Create thread-safe shared state (STEP 1 of our refactoring)
+
+            config, debug_log, display_state=display_state    display_state = ThreadSafeDisplayState()
+
+        )    print("✅ ThreadSafeDisplayState created")
+
+        print("✅ SessionManager created with shared state")
+
+    except Exception as e:    # Create session manager with shared state (STEP 2 of our refactoring)
+
+        print(f"❌ Shared object creation failed: {e}")    session_manager = SessionManager(config, debug_log, display_state)
+
+        raise    print("✅ SessionManager created with shared state")
+
+
+
+    # Initialize all managers    print("🔧 Initializing managers...")
+
+    print("🔧 Initializing managers...")
+
+    try:    # Create all managers
+
+        lighting_config = config.get("LIGHTING_CONFIG", {})    try:
+
+        camera = CameraManager(        camera = CameraManager(
+
+            config["CAM_RESOLUTION"],            cam_resolution,
+
+            config.get("TEST_VIDEO_PATH", 0),            config["TEST_VIDEO_PATH"],
+
+            config.get("USE_WEBCAM", True),            config["USE_WEBCAM"],
+
+            lighting_config,            lighting_config,
+
+        )        )
+
+        print("✅ Camera manager initialized")        print("✅ Camera manager initialized")
+
+
+
+        gpio = GPIOManager(config["BUTTON_PIN"], config["RELAY_PIN"], debug_log)        gpio = GPIOManager(config["BUTTON_PIN"], config["RELAY_PIN"], debug_log)
+
+        print("✅ GPIO manager initialized")        print("✅ GPIO manager initialized")
+
+
+
+        audio = AudioManager(debug=args.debug or config.get("DEBUG_AUDIO", False))        audio = AudioManager(debug=args.debug or config.get("DEBUG_AUDIO", False))
+
+        print("✅ Audio manager initialized")        print("✅ Audio manager initialized")
+
+
+
+        overlay = OverlayRenderer(        overlay = OverlayRenderer(
+
+            config["FONT_PATH"],            config["FONT_PATH"],
+
+            config["FONT_SIZE"],            config["FONT_SIZE"],
+
+            config["OVERLAY_GOTCHA_TEXT"],            config["OVERLAY_GOTCHA_TEXT"],
+
+            config["OVERLAY_IDLE_TEXT"],            config["OVERLAY_IDLE_TEXT"],
+
+        )        )
+
+        print("✅ Overlay renderer initialized")        print("✅ Overlay renderer initialized")
+
+
+
+        video_manager = VideoManager(config, debug_log)        video_manager = VideoManager(config, debug_log)
+
+        print("✅ Video manager initialized")        print("✅ Video manager initialized")
+
+
+
+        photo_manager = PhotoCaptureManager(config, debug_log)        photo_manager = PhotoCaptureManager(config, debug_log)
+
+        print("✅ Photo manager initialized")        print("✅ Photo manager initialized")
+
+
+
+        # Camera control components        # Camera control components
+
+        settings_overlay = SettingsOverlay()        settings_overlay = SettingsOverlay()
+
+        camera_controls = CameraControls(camera, lighting_config, settings_overlay)        camera_controls = CameraControls(camera, lighting_config, settings_overlay)
+
+        print("✅ Camera controls initialized")        print("✅ Camera controls initialized")
+
+        
+
+    except Exception as e:        # Show camera controls help
+
+        print(f"❌ Manager initialization failed: {e}")        print("\n🎛️ Camera Controls Available:")
+
+        raise        camera_controls.print_controls_help()
+
+
+
+    # Create VideoRenderer with shared state    except Exception as e:
+
+    print("🔧 Creating VideoRenderer...")        print(f"❌ Manager initialization failed: {e}")
+
+    try:        raise
+
+        video_renderer = VideoRenderer(
+
+            display_state=display_state,    # Create VideoRenderer with shared state
+
+            camera_manager=camera,    print("🔧 Creating VideoRenderer...")
+
+            overlay_renderer=overlay,    try:
+
+            config=config,        video_renderer = VideoRenderer(
+
+            camera_controls=camera_controls,            display_state=display_state,
+
+            settings_overlay=settings_overlay,            camera_manager=camera,
+
+        )            overlay_renderer=overlay,
+
+        print("✅ VideoRenderer created")            config=config,
+
+    except Exception as e:            camera_controls=camera_controls,
+
+        print(f"❌ VideoRenderer creation failed: {e}")            settings_overlay=settings_overlay,
+
+        raise        )
+
+        print("✅ VideoRenderer created")
+
+    print("🎮 Starting application with threaded VideoRenderer...")    except Exception as e:
+
+        print(f"❌ VideoRenderer creation failed: {e}")
+
+    # Start VideoRenderer in its own thread        raise
+
+    import threading
+
+    print("🎮 Starting application with threaded VideoRenderer...")
+
+    # Create a flag to coordinate shutdown
+
+    shutdown_event = threading.Event()    # Start VideoRenderer in its own thread
+
+    import threading
+
+    try:
+
+        # Start video rendering thread    # Create a flag to coordinate shutdown
+
+        print("🎬 Starting video rendering thread...")    shutdown_event = threading.Event()
+
+        video_thread = threading.Thread(
+
+            target=video_renderer.run_continuous_loop, name="VideoRenderer"    try:
+
+        )        # Start video rendering thread
+
+        video_thread.daemon = True  # Thread will exit when main program exits        print("🎬 Starting video rendering thread...")
+
+        video_thread.start()        video_thread = threading.Thread(
+
+        print("✅ Video thread started")            target=video_renderer.run_continuous_loop, name="VideoRenderer"
+
+        )
+
+        # Main thread just waits (for now - will handle countdown logic later)        video_thread.daemon = True  # Thread will exit when main program exits
+
+        print("⏳ Main thread waiting... Press Ctrl+C to quit")        video_thread.start()
+
+        while not shutdown_event.is_set():        print("✅ Video thread started")
+
+            threading.Event().wait(1)  # Sleep 1 second between checks
+
+        # Main thread handles session timing and user input
+
+    except KeyboardInterrupt:        print("⏳ Main thread handling session logic... Press Ctrl+C to quit")
+
+        print("🛑 Interrupted by user")        last_update = time.time()
+
+    finally:        
+
+        print("🔧 Shutting down...")        while not shutdown_event.is_set():
+
+        shutdown_event.set()            try:
+
+        video_renderer.cleanup()                now = time.time()
+
+        print("🔧 Cleanup complete")                
+
+                # Update session manager (handles countdown timing and state transitions)
+
+                height, width = 720, 1280  # Default dimensions
+
+if __name__ == "__main__":                action = session_manager.update(
+
+    main()                    now=now,
+                    frame_dimensions=(width, height),
+                    video_recording=False,  # TODO: Connect video manager
+                    video_finalized=False,
                 )
-            except Exception:
-                pass
-            # If QR display is active, show QR code centered with caption
-            if qr_manager.is_active() and qr_img is not None:
-                # Resize QR code to 1/3 of frame height
-                scale = frame.shape[0] // 3 / qr_h
-                qr_resized = cv2.resize(
-                    qr_img,
-                    (int(qr_w * scale), int(qr_h * scale)),
-                    interpolation=cv2.INTER_AREA,
-                )
-                h, w = qr_resized.shape[:2]
-                # Center QR code
-                y1 = (frame.shape[0] - h) // 2
-                x1 = (frame.shape[1] - w) // 2
-                y2 = y1 + h
-                x2 = x1 + w
-                frame[y1:y2, x1:x2] = qr_resized
-                # Add caption below QR code
-                caption = "Scan for Your Photos"
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                font_scale = 1.2
-                thickness = 3
-                (tw, th), _ = cv2.getTextSize(caption, font, font_scale, thickness)
-                cx = (frame.shape[1] - tw) // 2
-                cy = y2 + th + 10
-                if cy + th < frame.shape[0]:
-                    cv2.putText(
-                        frame,
-                        caption,
-                        (cx, cy),
-                        font,
-                        font_scale,
-                        (0, 0, 0),
-                        thickness + 2,
-                        cv2.LINE_AA,
-                    )
-                    cv2.putText(
-                        frame,
-                        caption,
-                        (cx, cy),
-                        font,
-                        font_scale,
-                        (0, 255, 0),
-                        thickness,
-                        cv2.LINE_AA,
-                    )
+                
+                # Handle countdown updates (beeps and timing)
+                if session_manager.state.countdown_active:
+                    countdown_result = session_manager.update_countdown(now, audio, gpio)
+                    if countdown_result == "gotcha":
+                        print("🎭 Starting gotcha phase...")
+                        session_manager.trigger_gotcha(now)
+                    elif isinstance(countdown_result, int):
+                        # Update display with countdown number
+                        display_state.update_countdown(countdown_result)
+                        print(f"⏰ Countdown: {countdown_result}")
+                
+                # Check for quit request from video renderer
+                # Note: VideoRenderer runs in its own thread, but we can't easily get
+                # key presses from it to main thread without additional complexity.
+                # For now, we'll add button handling in next iteration.
+                
+                time.sleep(0.1)  # 10 FPS update rate for session logic
+                
+            except Exception as e:
+                print(f"❌ Error in main loop: {e}")
+                break
 
-            # Add camera settings overlay if visible
-            frame = settings_overlay.draw_overlay(frame)
-
-            # Display
-            if screen is not None:
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                fh, fw = rgb.shape[:2]
-                sw, sh = screen_size
-                scale = min(sw / fw, sh / fh)
-                new_size = (int(fw * scale), int(fh * scale))
-                surf_img = cv2.resize(rgb, new_size, interpolation=cv2.INTER_LINEAR)
-                surf = pygame.image.frombuffer(surf_img.tobytes(), new_size, "RGB")
-                screen.fill((0, 0, 0))
-                x = (sw - new_size[0]) // 2
-                y = (sh - new_size[1]) // 2
-                screen.blit(surf, (x, y))
-                pygame.display.flip()
-                # Handle pygame events
-                if keyboard_input.handle_pygame_events(
-                    state, qr_manager, start_countdown
-                ):
-                    raise KeyboardInterrupt()
-            else:
-                try:
-                    # Add camera settings overlay if visible
-                    frame = settings_overlay.draw_overlay(frame)
-                    cv2.imshow(WINDOW_NAME, frame)
-                    # Non-blocking waitKey to keep display responsive
-                    key = cv2.waitKey(1) & 0xFF
-                    if keyboard_input.handle_opencv_key(
-                        key, state, qr_manager, start_countdown
-                    ):
-                        break
-                except Exception:
-                    pass
-                # Minimal sleep to prevent excessive CPU usage
-                time.sleep(0.005)
+    except KeyboardInterrupt:
+        print("🛑 Interrupted by user")
     finally:
-        video_manager.cleanup()
-        photo_manager.cleanup()
-        countdown_manager.cleanup()
-        gotcha_manager.cleanup()
-        qr_manager.cleanup()
-        keyboard_input.cleanup()
-        camera.release()
-        try:
-            cv2.destroyAllWindows()
-        except Exception:
-            pass
-        try:
-            if screen is not None:
-                pygame.display.quit()
-        except Exception:
-            pass
-        gpio.cleanup()
+        print("🔧 Shutting down...")
+        shutdown_event.set()
+        video_renderer.cleanup()
+        print("🔧 Cleanup complete")
+
+    except KeyboardInterrupt:
+        print("🛑 Interrupted by user")
+    finally:
+        print("� Shutting down...")
+        shutdown_event.set()
+        video_renderer.cleanup()
+        print("🔧 Cleanup complete")
 
 
 if __name__ == "__main__":

@@ -1,11 +1,12 @@
 {
     "version": "0.2.0",
     "configurations": [
+
         {
-            "name": "Python: Run main.py (Windows)",
+            "name": "Python: Run photobooth.py (Windows)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/main.py",
+            "program": "${workspaceFolder}/photobooth.py",
             "console": "integratedTerminal",
             "justMyCode": true
         },

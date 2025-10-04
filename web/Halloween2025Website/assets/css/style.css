@@ -27,6 +27,11 @@ html, body {
     font-family: 'Georgia', 'Times New Roman', serif;
     line-height: 1.6;
     min-height: 100vh;
+    background-image: 
+        linear-gradient(rgba(10, 10, 10, 0.9), rgba(10, 10, 10, 0.9)),
+        url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><filter id="noise"><feTurbulence baseFrequency="0.9" numOctaves="4" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0"/></filter></defs><rect width="200" height="200" fill="%23050505"/><g opacity="0.1"><circle cx="30" cy="170" r="3" fill="%23444"/><circle cx="80" cy="160" r="2" fill="%23333"/><circle cx="150" cy="180" r="2.5" fill="%23444"/><path d="M20 180 L25 160 L30 180 Z" fill="%23222"/><path d="M140 185 L145 165 L150 185 Z" fill="%23222"/><path d="M70 175 L75 155 L80 175 Z" fill="%23222"/><rect x="60" y="120" width="80" height="60" rx="10" fill="%23111" opacity="0.3"/><path d="M85 120 Q100 110 115 120 L115 140 Q100 150 85 140 Z" fill="%230a0a0a"/><circle cx="100" cy="130" r="15" fill="none" stroke="%23333" stroke-width="1" opacity="0.5"/></g><rect width="200" height="200" fill="url(%23noise)" opacity="0.1"/></svg>');
+    background-size: 400px 400px;
+    background-attachment: fixed;
 }
 
 /* Typography */
@@ -135,10 +140,28 @@ html, body {
     position: relative;
 }
 
+.session-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 107, 53, 0.1), transparent);
+    transition: left 0.6s ease;
+    z-index: 1;
+}
+
+.session-card:hover::before {
+    left: 100%;
+}
+
 .session-card:hover {
-    transform: translateY(-8px);
+    transform: translateY(-4px) scale(1.02);
     border-color: var(--accent-orange);
-    box-shadow: 0 15px 40px var(--shadow-dark);
+    box-shadow: 
+        0 8px 25px var(--shadow-dark),
+        0 0 20px rgba(255, 107, 53, 0.2);
 }
 
 .session-thumbnail {

@@ -3,6 +3,8 @@ camera_controls.py
 Handles live camera adjustment controls during preview
 """
 
+import cv2
+
 
 class CameraControls:
     def __init__(self, camera, lighting_config, settings_overlay=None):
@@ -31,8 +33,16 @@ class CameraControls:
 
     def handle_key(self, key):
         """Handle camera control key presses. Returns True if key was handled."""
-        if not (hasattr(self.camera, "picam2") and self.camera.picam2):
+        # Check if we have Picamera2 (real camera controls) or OpenCV (limited/simulated)
+        has_picam2 = hasattr(self.camera, "picam2") and self.camera.picam2
+        has_opencv = hasattr(self.camera, "cap") and self.camera.cap
+        
+        if not (has_picam2 or has_opencv):
+            print("❌ No camera backend available for controls")
             return False
+            
+        if not has_picam2:
+            print("⚠️ Using OpenCV camera - controls will be simulated/limited")
 
         handled = True
 
@@ -72,7 +82,11 @@ class CameraControls:
     def _cycle_white_balance(self):
         """Cycle through white balance modes."""
         self.current_wb_mode = (self.current_wb_mode + 1) % len(self.wb_modes)
-        self.camera.picam2.set_controls({"AwbMode": self.current_wb_mode})
+        
+        # Apply to Picamera2 if available
+        if hasattr(self.camera, "picam2") and self.camera.picam2:
+            self.camera.picam2.set_controls({"AwbMode": self.current_wb_mode})
+        
         message = f"🎨 White Balance: {self.wb_modes[self.current_wb_mode]} (Mode {self.current_wb_mode})"
         print(message)
         if self.settings_overlay:
@@ -85,7 +99,15 @@ class CameraControls:
     def _adjust_brightness(self, delta):
         """Adjust brightness by delta."""
         self.current_brightness = max(-1.0, min(1.0, self.current_brightness + delta))
-        self.camera.picam2.set_controls({"Brightness": self.current_brightness})
+        
+        # Apply to Picamera2 if available
+        if hasattr(self.camera, "picam2") and self.camera.picam2:
+            self.camera.picam2.set_controls({"Brightness": self.current_brightness})
+        elif hasattr(self.camera, "cap") and self.camera.cap:
+            # OpenCV brightness is 0-255, convert from -1.0 to 1.0 range
+            opencv_brightness = int((self.current_brightness + 1.0) * 127.5)
+            self.camera.cap.set(cv2.CAP_PROP_BRIGHTNESS, opencv_brightness)
+        
         message = f"💡 Brightness: {self.current_brightness:.1f}"
         print(message)
         if self.settings_overlay:
@@ -97,14 +119,40 @@ class CameraControls:
     def _adjust_contrast(self, delta):
         """Adjust contrast by delta."""
         self.current_contrast = max(0.0, min(2.0, self.current_contrast + delta))
-        self.camera.picam2.set_controls({"Contrast": self.current_contrast})
+        
+        # Apply to Picamera2 if available
+        if hasattr(self.camera, "picam2") and self.camera.picam2:
+            self.camera.picam2.set_controls({"Contrast": self.current_contrast})
+        elif hasattr(self.camera, "cap") and self.camera.cap:
+            # OpenCV contrast is 0-255, convert from 0.0 to 2.0 range
+            opencv_contrast = int(self.current_contrast * 127.5)
+            self.camera.cap.set(cv2.CAP_PROP_CONTRAST, opencv_contrast)
+            
         print(f"🔳 Contrast: {self.current_contrast:.1f}")
+        if self.settings_overlay:
+            self.settings_overlay.show_setting_change(
+                "Contrast", f"{self.current_contrast:.2f}"
+            )
+            self._update_overlay_settings()
 
     def _adjust_saturation(self, delta):
         """Adjust saturation by delta."""
         self.current_saturation = max(0.0, min(2.0, self.current_saturation + delta))
-        self.camera.picam2.set_controls({"Saturation": self.current_saturation})
+        
+        # Apply to Picamera2 if available
+        if hasattr(self.camera, "picam2") and self.camera.picam2:
+            self.camera.picam2.set_controls({"Saturation": self.current_saturation})
+        elif hasattr(self.camera, "cap") and self.camera.cap:
+            # OpenCV saturation is 0-255, convert from 0.0 to 2.0 range
+            opencv_saturation = int(self.current_saturation * 127.5)
+            self.camera.cap.set(cv2.CAP_PROP_SATURATION, opencv_saturation)
+            
         print(f"🌈 Saturation: {self.current_saturation:.1f}")
+        if self.settings_overlay:
+            self.settings_overlay.show_setting_change(
+                "Saturation", f"{self.current_saturation:.2f}"
+            )
+            self._update_overlay_settings()
 
     def _adjust_exposure(self, delta):
         """Adjust exposure by delta microseconds."""

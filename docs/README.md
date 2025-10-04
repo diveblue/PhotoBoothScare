@@ -29,7 +29,7 @@ python -m venv .venv --system-site-packages
 source .venv/bin/activate
 
 pip install -r requirements.txt
-python main.py --debug --windowed
+python photobooth.py --debug --windowed
 ```
 
 ### Command Line Options
@@ -55,9 +55,14 @@ python main.py --debug --windowed
 
 The application follows **SOLID principles** with a clean, modular architecture:
 
-### Core Manager Classes
-- **`config_manager.py`** - Configuration loading and environment management
-- **`debug_logger.py`** - Centralized logging system with categories
+### Package Structure (Updated 2025-09-29)
+**Entry Point:** `photobooth.py` - New entry point with path setup for reorganized structure
+**Main Package:** `src/photobooth/` with organized subdirectories:
+
+### Core Manager Classes (`src/photobooth/managers/`)
+- **`camera_manager.py`** - Picamera2 preferred (RGB888), OpenCV fallback
+- **`video_manager.py`** - Records 1280x720 mp4v codec, timing-critical stop logic
+- **`file_manager.py`** - Local to network file movement during QR display
 - **`camera_manager.py`** - Camera abstraction (Picamera2/OpenCV) with live controls
 - **`display_manager.py`** - Display system (pygame/OpenCV) with environment detection
 - **`session_manager.py`** - Photo booth session state management and transitions

@@ -1,6 +1,27 @@
 """
-camera_manager.py
-Handles camera initialization and frame capture for both Picamera2 and OpenCV sources.
+CameraManager - Hardware Abstraction for Camera Operations
+
+RESPONSIBILITIES:
+- Manages camera initialization and frame capture across different hardware
+- Provides unified interface for Picamera2 (Raspberry Pi) and OpenCV (webcam) backends
+- Handles camera failures with automatic recovery and fallback mechanisms
+- Maintains camera settings and provides consistent RGB888 frame format
+
+KEY METHODS:
+- init_camera(): Initialize camera with appropriate backend (Picamera2 preferred)
+- get_frame(): Capture single frame with error recovery
+- release(): Clean shutdown of camera resources
+- set_camera_setting(): Adjust camera parameters (brightness, contrast, etc.)
+
+BACKEND SUPPORT:
+- Picamera2: Primary backend for Raspberry Pi cameras (IMX708 sensor)
+- OpenCV: Fallback for webcams and development environments
+- Test Video: File-based input for testing without camera hardware
+
+ARCHITECTURE:
+- Hardware abstraction following Dependency Inversion principle
+- Encapsulates camera complexity from higher-level managers
+- Provides consistent interface regardless of underlying camera system
 """
 
 import os
@@ -18,7 +39,10 @@ except Exception:
 
 class CameraManager:
     """
-    Abstracts camera access for both Raspberry Pi (Picamera2) and generic webcams (OpenCV).
+    Hardware abstraction layer for camera operations.
+
+    Provides unified interface for different camera backends while handling
+    initialization, frame capture, and recovery from camera failures.
     """
 
     def __init__(

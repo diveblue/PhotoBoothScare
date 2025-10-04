@@ -1,6 +1,29 @@
 """
-photo_capture_manager.py
-Handles photo capture logic during the SMILE phase
+PhotoCaptureManager - Photo Capture During Smile Phase
+
+RESPONSIBILITIES:
+- Manages photo capture during the SMILE phase of photobooth sessions
+- Controls timing and frequency of photo captures (0.7s intervals, max 5 photos)
+- Handles photo file naming with session ID and timestamp organization
+- Coordinates with AudioManager for shutter sound effects
+
+KEY METHODS:
+- start_smile_phase(): Initialize photo capture phase with shutter sound
+- capture_photo(): Save individual photo frame with proper naming
+- should_capture(): Determine if timing is right for next photo
+- reset(): Clean state for next session
+
+PHOTO CAPTURE LOGIC:
+- Maximum 5 photos per session at 0.7 second intervals
+- Files saved as: PHOTO_DIR/sessionId_photoIndex_timestamp.jpg
+- Automatic directory creation and file management
+- Coordinated timing with session state transitions
+
+ARCHITECTURE:
+- Encapsulates all photo capture logic following Single Responsibility
+- Integrates with SessionManager timing through main.py coordination
+- Maintains capture state independently of other session phases
+- Clean separation between capture logic and file operations
 """
 
 import os
@@ -8,6 +31,13 @@ import cv2
 
 
 class PhotoCaptureManager:
+    """
+    Manages photo capture during photobooth smile phase.
+
+    Handles timing, file naming, and coordination with audio effects
+    for capturing multiple photos during the smile phase.
+    """
+
     def __init__(self, config, debug_log_func):
         self.config = config
         self.debug_log = debug_log_func

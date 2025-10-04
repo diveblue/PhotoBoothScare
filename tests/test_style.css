@@ -1,0 +1,28 @@
+/* Simple test CSS to verify loading */
+body {
+    background-color: #ff0000 !important;
+    color: white !important;
+    font-family: Arial, sans-serif !important;
+}
+
+h1 {
+    color: yellow !important;
+    text-align: center !important;
+}
+
+h2 {
+    color: lime !important;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Make it very obvious if this CSS loads */
+.site-header {
+    background: linear-gradient(45deg, purple, blue) !important;
+    padding: 20px !important;
+    border: 5px solid orange !important;
+}

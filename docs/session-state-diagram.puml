@@ -1,0 +1,83 @@
+@startuml PhotoBoothSessionStateDiagram
+!theme cerulean
+title PhotoBooth Session States - SOLID Architecture
+
+[*] --> Idle : Application Start
+
+state Idle {
+  Idle : **SessionManager.is_idle() = true**
+  Idle : - Camera preview with idle overlay
+  Idle : - Waiting for button press or keyboard input
+  Idle : - No recording active
+  Idle : - All managers in standby state
+}
+
+state Countdown {
+  Countdown : **SessionManager orchestrates countdown phase**
+  Countdown : - action.start_video → VideoManager begins recording
+  Countdown : - action.play_beep → AudioManager plays countdown sounds
+  Countdown : - action.show_countdown → OverlayRenderer displays numbers
+  Countdown : - action.trigger_scare → GPIOManager activates prop (at count=1)
+  Countdown : - Video+audio recording active throughout
+}
+
+state Smile {
+  Smile : **SessionManager coordinates photo capture**
+  Smile : - action.show_smile → OverlayRenderer displays "SMILE!"
+  Smile : - action.play_shutter → AudioManager plays camera sound
+  Smile : - action.capture_photo → PhotoCaptureManager saves images
+  Smile : - Continue video+audio recording for reactions
+  Smile : - Multiple photos at 0.7s intervals (max 5)
+}
+
+state Gotcha {
+  Gotcha : **SessionManager shows visual gotcha effect**
+  Gotcha : - action.show_gotcha → OverlayRenderer displays scare text
+  Gotcha : - Physical prop already triggered during countdown
+  Gotcha : - Continue video+audio recording for reaction capture
+  Gotcha : - Pure display state - no additional hardware actions
+}
+
+state QRDisplay {
+  QRDisplay : **SessionManager handles file operations**
+  QRDisplay : - action.stop_video → VideoManager ends recording
+  QRDisplay : - action.show_qr → OverlayRenderer displays QR code
+  QRDisplay : - VideoManager processes video+audio with FFmpeg  
+  QRDisplay : - action.move_files → Move content to network storage
+  QRDisplay : - Display "Scan for Photos" with session URL
+}
+
+Idle --> Countdown : **User Input**\nButton press or spacebar\n[SessionManager.update() with user_action]
+
+Countdown --> Smile : **Timer Complete**\nCountdown reaches zero\n[SessionManager.update() returns action.show_smile]
+
+Smile --> Gotcha : **Photos Complete**\nAll photos captured\n[SessionManager.update() returns action.show_gotcha]
+
+Gotcha --> QRDisplay : **Gotcha Duration Complete**\nScare display time elapsed\n[SessionManager.update() returns action.show_qr]
+
+QRDisplay --> Idle : **Session Complete**\nFiles moved & QR timeout\n[SessionManager.update() returns action.session_complete]
+
+note top of Countdown
+  **SOLID Architecture:**
+  SessionManager.update() called every frame
+  Returns SessionAction with specific commands
+  main.py executes actions via appropriate managers
+end note
+
+note right of Countdown
+  **Video Recording Lifecycle:**
+  • Starts: action.start_video during countdown
+  • Continues: Through smile, gotcha phases
+  • Stops: action.stop_video before QR display  
+  • Critical: Must stop before file movement
+end note
+
+note bottom of QRDisplay
+  **Simplified Architecture:**
+  ❌ GotchaManager eliminated - timing in SessionManager
+  ❌ Duplicate VideoManager removed - single implementation  
+  ✅ Clean SOLID design with Command pattern
+  ✅ SessionManager orchestrates, main.py executes
+end note
+
+@enduml

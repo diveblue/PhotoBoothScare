@@ -2,6 +2,7 @@
   "BUTTON_PIN": 17,
   "RELAY_PIN": 27,
   "COUNTDOWN_SECONDS": 3,
+  "PROP_TRIGGER_AT_COUNTDOWN": 1,
   "WINDOW_NAME": "Haunt Photo-Booth Preview",
   "USE_WEBCAM": true,
   "TEST_VIDEO_PATH": 0,
@@ -21,11 +22,12 @@
   "CAM_RESOLUTION_LOW": [960, 540],
   "CAM_RESOLUTION_HIGH": [1280, 720],
   "DEBUG_ENABLED": false,
-  "DEBUG_TIMING": false,
+  "DEBUG_TIMING": true,
   "DEBUG_AUDIO": false,
   "DEBUG_GPIO": false,
   "DEBUG_CAMERA": false,
   "QR_DISPLAY_SECONDS": 5.0,
+  "GOTCHA_RECORDING_SECONDS": 3.0,
   "LIGHTING_MODE": "TESTING",
   "CAMERA_SETTINGS": {
     "TESTING": {
@@ -46,5 +48,9 @@
       "AnalogueGain": 2.0,
       "NoiseReductionMode": 1
     }
-  }
+  },
+  "ENABLE_AUDIO": true,
+  "AUDIO_DEVICE_INDEX": 2,
+  "AUDIO_CHANNELS": 1,
+  "AUDIO_SAMPLE_RATE": 48000
 }

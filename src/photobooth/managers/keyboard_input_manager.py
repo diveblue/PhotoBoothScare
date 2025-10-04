@@ -1,18 +1,46 @@
 """
-keyboard_input_manager.py
-Handles keyboard input for both pygame and OpenCV display modes.
-Consolidates camera control shortcuts and system controls.
+KeyboardInputManager - User Input Processing and Camera Controls
+
+RESPONSIBILITIES:
+- Processes keyboard input for both pygame and OpenCV display modes
+- Handles camera control shortcuts (brightness, contrast, white balance, etc.)
+- Manages system controls (quit, help, button simulation)
+- Coordinates with SessionManager for session state awareness
+
+KEY METHODS:
+- handle_pygame_events(): Process pygame keyboard events with session state checking
+- handle_opencv_key(): Process OpenCV waitKey input with camera controls
+- handle_pygame_key(): Direct pygame key processing for cleaner input handling
+- cleanup(): Clean shutdown of input resources
+
+INPUT CATEGORIES:
+- System: Q/ESC (quit), F11 (quit), H (help display)
+- Session: SPACE (simulate button press with session state validation)
+- Camera: W(white balance), B(brightness), C(contrast), S(saturation), E(exposure), G(gain)
+- Settings: N(noise reduction), R(reset defaults)
+
+ARCHITECTURE:
+- Centralizes all keyboard input processing following Single Responsibility
+- Integrates with CameraControls for settings management
+- Respects session state through SessionManager coordination
+- Provides unified interface regardless of display backend (pygame vs OpenCV)
 """
 
 import pygame
 
 
 class KeyboardInputManager:
-    """Manages keyboard input for both pygame and OpenCV display modes."""
+    """
+    Manages keyboard input and camera controls for photobooth interface.
 
-    def __init__(self, camera_controls, debug_log):
+    Processes user input while respecting session state and providing
+    unified interface across different display backends.
+    """
+
+    def __init__(self, camera_controls, debug_log, session_manager):
         self.camera_controls = camera_controls
         self.debug_log = debug_log
+        self.session_manager = session_manager
 
     def handle_pygame_events(self, state, qr_manager, start_countdown_callback):
         """Handle pygame keyboard events. Returns True to quit, False to continue."""
@@ -28,7 +56,11 @@ class KeyboardInputManager:
                 # Button simulation
                 if event.key == pygame.K_SPACE:
                     self.debug_log("gpio", "⌨️  SPACE KEY pressed (simulating button)")
-                    start_countdown_callback()
+                    # Check session state before calling callback (same as hardware button)
+                    if not self.session_manager.is_idle():
+                        self.debug_log("gpio", "⌨️  SPACE KEY ignored (session active)")
+                    else:
+                        start_countdown_callback()
                     continue
 
                 # Camera control shortcuts (only when idle)
@@ -50,7 +82,11 @@ class KeyboardInputManager:
         # Button simulation
         if key == ord(" "):
             self.debug_log("gpio", "⌨️  SPACE KEY pressed (simulating button)")
-            start_countdown_callback()
+            # Check session state before calling callback (same as hardware button)
+            if not self.session_manager.is_idle():
+                self.debug_log("gpio", "⌨️  SPACE KEY ignored (session active)")
+            else:
+                start_countdown_callback()
             return False
 
         # Camera control shortcuts (only when idle)

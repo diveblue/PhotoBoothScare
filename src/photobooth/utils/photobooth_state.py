@@ -15,6 +15,8 @@ class PhotoBoothState:
         self.session_time = None
         self.session_id = None
         self.countdown_number = None
+        self.phase = None  # "smile", "gotcha", etc.
+        self.qr_url = None  # QR URL for gotcha overlay integration
 
     def start_countdown(self, countdown_seconds):
         import random

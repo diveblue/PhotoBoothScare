@@ -28,6 +28,8 @@ ARCHITECTURE:
 - Clean separation between hardware interface and business logic
 """
 
+import logging
+
 try:
     import RPi.GPIO as GPIO
 except Exception:
@@ -42,14 +44,10 @@ class GPIOManager:
     with automatic fallback between real hardware and development mock.
     """
 
-    def __init__(self, button_pin, relay_pin, debug_log_func=None):
-        self.button_pin = button_pin
-        self.relay_pin = relay_pin
-        self.debug_log = (
-            debug_log_func
-            if debug_log_func
-            else lambda cat, msg: print(f"[{cat.upper()}] {msg}")
-        )
+    def __init__(self, config):
+        self.button_pin = config["BUTTON_PIN"]
+        self.relay_pin = config["RELAY_PIN"]
+        self.logger = logging.getLogger(__name__)
 
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -57,8 +55,8 @@ class GPIOManager:
         # Ensure relay/LED is OFF at startup - HIGH for active-low relay
         GPIO.output(self.relay_pin, 1)
 
-        self.debug_log(
-            "gpio", f"🔌 GPIO INITIALIZED: Button={button_pin}, Relay={relay_pin}"
+        self.logger.debug(
+            f"🔌 GPIO INITIALIZED: Button={self.button_pin}, Relay={self.relay_pin}"
         )
 
     def add_event_detect(self, callback):
@@ -67,16 +65,15 @@ class GPIOManager:
         )
 
     def trigger_scare(self):
-        self.debug_log(
-            "gpio",
-            f"🔌 PROP TRIGGER: Pin {self.relay_pin} -> LOW for 0.3s (active-low)",
+        self.logger.debug(
+            f"🔌 PROP TRIGGER: Pin {self.relay_pin} -> LOW for 0.3s (active-low)"
         )
         GPIO.output(self.relay_pin, 0)  # LOW to trigger
         import time
 
         time.sleep(0.3)
         GPIO.output(self.relay_pin, 1)  # HIGH to turn off
-        self.debug_log("gpio", f"🔌 PROP TRIGGER: Pin {self.relay_pin} -> HIGH (off)")
+        self.logger.debug(f"🔌 PROP TRIGGER: Pin {self.relay_pin} -> HIGH (off)")
 
     def cleanup(self):
         GPIO.cleanup()

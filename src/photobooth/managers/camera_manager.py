@@ -27,6 +27,7 @@ ARCHITECTURE:
 import os
 import time
 import cv2
+import platform
 
 try:
     from picamera2 import Picamera2
@@ -35,6 +36,11 @@ try:
 except Exception:
     Picamera2 = None
     PICAMERA2_AVAILABLE = False
+
+# Platform detection for better logging
+IS_RASPBERRY_PI = platform.machine().startswith("arm") or os.path.exists(
+    "/boot/config.txt"
+)
 
 
 class CameraManager:
@@ -45,13 +51,15 @@ class CameraManager:
     initialization, frame capture, and recovery from camera failures.
     """
 
-    def __init__(
-        self, cam_resolution, test_video_path=0, use_webcam=True, lighting_config=None
-    ):
-        self.cam_resolution = cam_resolution
-        self.test_video_path = test_video_path
-        self.use_webcam = use_webcam
-        self.lighting_config = lighting_config or {}
+    def __init__(self, config):
+        if config["CAM_RESOLUTION"] == "CAM_RESOLUTION_HIGH":
+            self.cam_resolution = config["CAM_RESOLUTION_HIGH"]
+        else:
+            self.cam_resolution = config["CAM_RESOLUTION_LOW"]
+
+        self.test_video_path = config.get("TEST_VIDEO_PATH", 0)
+        self.use_webcam = config.get("USE_WEBCAM", True)
+        self.lighting_config = config.get("LIGHTING_CONFIG", {})
         self.picam2 = None
         self.cap = None
         self.init_camera()
@@ -162,6 +170,9 @@ class CameraManager:
                     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                 except Exception:
                     pass
+            print(
+                f"[DEBUG] CameraManager.get_frame (picam2): shape={getattr(frame, 'shape', None)}, dtype={getattr(frame, 'dtype', None)}"
+            )
             return frame
         else:
             try:
@@ -187,6 +198,9 @@ class CameraManager:
                 self.cap = cv2.VideoCapture(self.test_video_path)
                 return None
 
+            print(
+                f"[DEBUG] CameraManager.get_frame (opencv): shape={getattr(frame, 'shape', None)}, dtype={getattr(frame, 'dtype', None)} min={getattr(frame, 'min', lambda: None)()} max={getattr(frame, 'max', lambda: None)()}"
+            )
             return frame
 
     def set_white_balance_mode(self, mode):

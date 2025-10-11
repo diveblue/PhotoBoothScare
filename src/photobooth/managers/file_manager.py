@@ -3,6 +3,7 @@ file_manager.py
 Handles file cleanup and management operations
 """
 
+import logging
 import os
 import glob
 import time
@@ -10,9 +11,9 @@ from pathlib import Path
 
 
 class FileManager:
-    def __init__(self, config, debug_log_func):
+    def __init__(self, config):
         self.config = config
-        self.debug_log = debug_log_func
+        self.logger = logging.getLogger(__name__)
 
     def _wait_for_video_ready(self, filepath, max_wait=3.0):
         """Wait briefly for video file to be ready (audio muxing complete)."""
@@ -44,7 +45,7 @@ class FileManager:
     def cleanup_old_files(self):
         """Clean up old files that might have accumulated."""
         try:
-            self.debug_log("session", "🧹 CLEANING UP old files")
+            self.logger.debug("🧹 CLEANING UP old files")
 
             # Clean up old photo files
             photo_files = glob.glob("*_photo_*.jpg")
@@ -54,9 +55,9 @@ class FileManager:
                     file_age = time.time() - os.path.getmtime(photo_file)
                     if file_age > 3600:  # 1 hour
                         os.remove(photo_file)
-                        self.debug_log("session", f"🗑️ REMOVED old photo: {photo_file}")
+                        self.logger.debug(f"🗑️ REMOVED old photo: {photo_file}")
                 except Exception as e:
-                    self.debug_log(
+                    self.logger.debug(
                         "session", f"❌ Failed to remove photo {photo_file}: {e}"
                     )
 
@@ -68,9 +69,9 @@ class FileManager:
                     file_age = time.time() - os.path.getmtime(video_file)
                     if file_age > 3600:  # 1 hour
                         os.remove(video_file)
-                        self.debug_log("session", f"🗑️ REMOVED old video: {video_file}")
+                        self.logger.debug(f"🗑️ REMOVED old video: {video_file}")
                 except Exception as e:
-                    self.debug_log(
+                    self.logger.debug(
                         "session", f"❌ Failed to remove video {video_file}: {e}"
                     )
 
@@ -79,17 +80,17 @@ class FileManager:
             for temp_file in temp_files:
                 try:
                     os.remove(temp_file)
-                    self.debug_log("session", f"🗑️ REMOVED temp file: {temp_file}")
+                    self.logger.debug(f"🗑️ REMOVED temp file: {temp_file}")
                 except Exception as e:
-                    self.debug_log(
+                    self.logger.debug(
                         "session", f"❌ Failed to remove temp file {temp_file}: {e}"
                     )
 
-            self.debug_log("session", "✅ CLEANUP completed")
+            self.logger.debug("✅ CLEANUP completed")
             return True
 
         except Exception as e:
-            self.debug_log("session", f"❌ CLEANUP failed: {e}")
+            self.logger.debug(f"❌ CLEANUP failed: {e}")
             return False
 
     def ensure_directories(self):
@@ -103,11 +104,11 @@ class FileManager:
             video_dir = Path(self.config["VIDEO_DIR"])
             video_dir.mkdir(parents=True, exist_ok=True)
 
-            self.debug_log("session", "📁 DIRECTORIES verified/created")
+            self.logger.debug("📁 DIRECTORIES verified/created")
             return True
 
         except Exception as e:
-            self.debug_log("session", f"❌ DIRECTORY creation failed: {e}")
+            self.logger.debug(f"❌ DIRECTORY creation failed: {e}")
             return False
 
     def get_file_info(self, filepath):
@@ -120,7 +121,7 @@ class FileManager:
                 "created": stat.st_ctime,
             }
         except Exception as e:
-            self.debug_log("session", f"❌ Failed to get file info for {filepath}: {e}")
+            self.logger.debug(f"❌ Failed to get file info for {filepath}: {e}")
             return None
 
     def _wait_for_file_stable(self, filepath, max_wait=5.0):
@@ -179,17 +180,17 @@ class FileManager:
             ("video", network_video_dir),
         ]:
             if not os.path.exists(dest_dir):
-                self.debug_log(
+                self.logger.debug(
                     "migrate",
                     f"❌ {desc} destination directory does not exist: {dest_dir}",
                 )
                 try:
                     os.makedirs(dest_dir, exist_ok=True)
-                    self.debug_log(
+                    self.logger.debug(
                         "migrate", f"✅ Created {desc} directory: {dest_dir}"
                     )
                 except Exception as e:
-                    self.debug_log(
+                    self.logger.debug(
                         "migrate",
                         f"❌ Failed to create {desc} directory {dest_dir}: {e}",
                     )
@@ -201,9 +202,9 @@ class FileManager:
                 with open(test_file, "w") as f:
                     f.write("test")
                 os.remove(test_file)
-                self.debug_log("migrate", f"✅ {desc} directory writable: {dest_dir}")
+                self.logger.debug(f"✅ {desc} directory writable: {dest_dir}")
             except Exception as e:
-                self.debug_log(
+                self.logger.debug(
                     "migrate", f"❌ {desc} directory not writable: {dest_dir} - {e}"
                 )
                 raise PermissionError(
@@ -212,18 +213,18 @@ class FileManager:
 
         # Photos
         photo_files = glob.glob(os.path.join(local_photo_dir, prefix + "*"))
-        self.debug_log("migrate", f"📸 Found {len(photo_files)} photos to move")
+        self.logger.debug(f"📸 Found {len(photo_files)} photos to move")
         for src in photo_files:
             dest = os.path.join(network_photo_dir, os.path.basename(src))
             try:
                 # Check source file exists and is readable
                 if not os.path.exists(src):
-                    self.debug_log("migrate", f"❌ Source photo missing: {src}")
+                    self.logger.debug(f"❌ Source photo missing: {src}")
                     continue
 
                 # Try direct move first
                 shutil.move(src, dest)
-                self.debug_log(
+                self.logger.debug(
                     "migrate", f"✅ MOVED photo {os.path.basename(src)} -> {dest}"
                 )
                 moved_files.append(src)
@@ -232,26 +233,26 @@ class FileManager:
                 try:
                     shutil.copy2(src, dest)
                     os.remove(src)
-                    self.debug_log(
+                    self.logger.debug(
                         "migrate",
                         f"✅ COPIED photo {os.path.basename(src)} -> {dest} (removed local)",
                     )
                     moved_files.append(src)
                 except Exception as copy_error:
-                    self.debug_log("migrate", f"❌ FAILED moving photo {src} -> {dest}")
-                    self.debug_log("migrate", f"   Move error: {move_error}")
-                    self.debug_log("migrate", f"   Copy error: {copy_error}")
+                    self.logger.debug(f"❌ FAILED moving photo {src} -> {dest}")
+                    self.logger.debug(f"   Move error: {move_error}")
+                    self.logger.debug(f"   Copy error: {copy_error}")
                     failed_files.append(src)
 
         # Videos
         video_files = glob.glob(os.path.join(local_video_dir, prefix + "*"))
-        self.debug_log("migrate", f"🎥 Found {len(video_files)} videos to move")
+        self.logger.debug(f"🎥 Found {len(video_files)} videos to move")
         for src in video_files:
             dest = os.path.join(network_video_dir, os.path.basename(src))
             try:
                 # Check source file exists and is readable
                 if not os.path.exists(src):
-                    self.debug_log("migrate", f"❌ Source video missing: {src}")
+                    self.logger.debug(f"❌ Source video missing: {src}")
                     continue
 
                 # For video files, wait briefly for file to stabilize (audio muxing completion)
@@ -267,7 +268,7 @@ class FileManager:
                 if os.path.exists(dest):
                     dest_size = os.path.getsize(dest)
                     if dest_size == src_size:
-                        self.debug_log(
+                        self.logger.debug(
                             "migrate",
                             f"✅ MOVED video {os.path.basename(src)} -> {dest} ({dest_size} bytes)",
                         )
@@ -275,7 +276,7 @@ class FileManager:
                             f"[DEBUG] Video moved successfully: {dest} ({dest_size} bytes)"
                         )
                     else:
-                        self.debug_log(
+                        self.logger.debug(
                             "migrate",
                             f"⚠️ Size mismatch: {os.path.basename(src)} src={src_size} dest={dest_size}",
                         )
@@ -283,7 +284,7 @@ class FileManager:
                             f"[WARNING] Video size mismatch after move: {src_size} -> {dest_size}"
                         )
                 else:
-                    self.debug_log(
+                    self.logger.debug(
                         "migrate",
                         f"❌ Move appeared successful but dest file missing: {dest}",
                     )
@@ -297,24 +298,24 @@ class FileManager:
                 try:
                     shutil.copy2(src, dest)
                     os.remove(src)
-                    self.debug_log(
+                    self.logger.debug(
                         "migrate",
                         f"✅ COPIED video {os.path.basename(src)} -> {dest} (removed local)",
                     )
                     moved_files.append(src)
                 except Exception as copy_error:
-                    self.debug_log("migrate", f"❌ FAILED moving video {src} -> {dest}")
-                    self.debug_log("migrate", f"   Move error: {move_error}")
-                    self.debug_log("migrate", f"   Copy error: {copy_error}")
+                    self.logger.debug(f"❌ FAILED moving video {src} -> {dest}")
+                    self.logger.debug(f"   Move error: {move_error}")
+                    self.logger.debug(f"   Copy error: {copy_error}")
                     failed_files.append(src)
 
         # Summary
-        self.debug_log(
+        self.logger.debug(
             "migrate",
             f"📁 Migration complete: {len(moved_files)} moved, {len(failed_files)} failed",
         )
         if failed_files:
-            self.debug_log(
+            self.logger.debug(
                 "migrate",
                 f"❌ Failed files: {[os.path.basename(f) for f in failed_files]}",
             )
@@ -374,7 +375,7 @@ class FileManager:
             if not old_files:
                 continue
 
-            self.debug_log(
+            self.logger.debug(
                 "migrate", f"🧹 Found {len(old_files)} old {desc} files to cleanup"
             )
 
@@ -383,7 +384,7 @@ class FileManager:
                 try:
                     # Skip if destination already exists (avoid conflicts)
                     if os.path.exists(dest):
-                        self.debug_log(
+                        self.logger.debug(
                             "migrate",
                             f"⚠️ Destination exists, removing local: {os.path.basename(src)}",
                         )
@@ -393,7 +394,7 @@ class FileManager:
 
                     # Try to move the file
                     shutil.move(src, dest)
-                    self.debug_log(
+                    self.logger.debug(
                         "migrate",
                         f"✅ MOVED old {desc[:-1]} {os.path.basename(src)} -> {dest}",
                     )
@@ -403,19 +404,19 @@ class FileManager:
                     try:
                         shutil.copy2(src, dest)
                         os.remove(src)
-                        self.debug_log(
+                        self.logger.debug(
                             "migrate",
                             f"✅ COPIED old {desc[:-1]} {os.path.basename(src)} -> {dest} (removed local)",
                         )
                         total_moved += 1
                     except Exception as copy_error:
-                        self.debug_log(
+                        self.logger.debug(
                             "migrate",
                             f"❌ Failed to cleanup old {desc[:-1]} {src}: move={e}, copy={copy_error}",
                         )
 
         if total_moved > 0:
-            self.debug_log(
+            self.logger.debug(
                 "migrate",
                 f"🧹 Cleanup complete: {total_moved} old files moved to network",
             )

@@ -12,7 +12,8 @@ import os
 # Add src directory to Python path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
 src_dir = os.path.join(current_dir, "src")
-sys.path.insert(0, src_dir)
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
 # Import and run the main application
 if __name__ == "__main__":

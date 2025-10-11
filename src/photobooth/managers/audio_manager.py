@@ -24,6 +24,7 @@ ARCHITECTURE:
 - Designed for Raspberry Pi audio output and desktop development
 """
 
+import logging
 import pygame
 
 
@@ -42,8 +43,9 @@ class AudioManager:
     when audio hardware or sound files are not available.
     """
 
-    def __init__(self, debug=False):
-        self.debug = debug
+    def __init__(self, config):
+        self.config = config
+        self.logger = logging.getLogger(__name__)
         self.beep = _Null()
         self.shutter = _Null()
         try:
@@ -52,16 +54,14 @@ class AudioManager:
             pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=1024)
             pygame.mixer.init()
 
-            if self.debug:
-                print(f"[AUDIO] Mixer initialized: {pygame.mixer.get_init()}")
+            self.logger.debug(f"Mixer initialized: {pygame.mixer.get_init()}")
 
             try:
                 self.beep = pygame.mixer.Sound("assets/beep.wav")
                 self.shutter = pygame.mixer.Sound("assets/shutter.wav")
 
-                if self.debug:
-                    print(f"[AUDIO] Beep loaded: {self.beep.get_length():.2f}s")
-                    print(f"[AUDIO] Shutter loaded: {self.shutter.get_length():.2f}s")
+                self.logger.debug(f"Beep loaded: {self.beep.get_length():.2f}s")
+                self.logger.debug(f"Shutter loaded: {self.shutter.get_length():.2f}s")
 
             except Exception as e:
                 print(

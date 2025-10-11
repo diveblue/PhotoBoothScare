@@ -19,6 +19,7 @@
   "RTSP_PASS": "dive2000",
   "RTSP_VIDEO_FPS": 20.0,
   "PYGAME_DRIVERS": ["kmsdrm", "fbcon", "directfb", "svgalib"],
+  "CAM_RESOLUTION":"CAM_RESOLUTION_LOW",
   "CAM_RESOLUTION_LOW": [960, 540],
   "CAM_RESOLUTION_HIGH": [1280, 720],
   "DEBUG_ENABLED": false,

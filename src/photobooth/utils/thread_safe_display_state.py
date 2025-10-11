@@ -1,3 +1,8 @@
+# DEPRECATED: This module is obsolete under the new PhotoBooth architecture (2025-10-08).
+# All state must be managed by SessionManager and PhotoBoothState.
+#
+# Attempting to import this module will raise an ImportError.
+raise ImportError("thread_safe_display_state.py is deprecated. Use SessionManager/PhotoBoothState only.")
 """
 ThreadSafeDisplayState - Thread-safe communication between Main and Video threads
 
@@ -19,7 +24,7 @@ class DisplayState:
 
     phase: str = "idle"  # "idle", "countdown", "smile", "gotcha", "qr"
     countdown_number: Optional[int] = None  # 3, 2, 1 for countdown display
-    gotcha_active: bool = False
+    # gotcha_active removed
     qr_data: Optional[str] = None
     session_id: Optional[str] = None
 
@@ -51,7 +56,7 @@ class ThreadSafeDisplayState:
     def update_gotcha(self, active: bool):
         """Update gotcha activation state"""
         with self._lock:
-            self._state.gotcha_active = active
+            # gotcha_active removed
 
     def update_qr(self, qr_data: Optional[str]):
         """Update QR code data to display"""
@@ -78,7 +83,7 @@ class ThreadSafeDisplayState:
             if countdown is not None:
                 self._state.countdown_number = countdown
             if gotcha is not None:
-                self._state.gotcha_active = gotcha
+                # gotcha_active removed
             if qr_data is not None:
                 self._state.qr_data = qr_data
             if session_id is not None:
@@ -93,7 +98,7 @@ class ThreadSafeDisplayState:
             return DisplayState(
                 phase=self._state.phase,
                 countdown_number=self._state.countdown_number,
-                gotcha_active=self._state.gotcha_active,
+                # gotcha_active removed
                 qr_data=self._state.qr_data,
                 session_id=self._state.session_id,
             )
@@ -121,7 +126,7 @@ class ThreadSafeDisplayState:
             return {
                 "phase": self._state.phase,
                 "countdown_number": self._state.countdown_number,
-                "gotcha_active": self._state.gotcha_active,
+                # gotcha_active removed
                 "has_qr_data": self._state.qr_data is not None,
                 "session_id": self._state.session_id,
             }

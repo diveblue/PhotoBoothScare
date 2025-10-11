@@ -1,19 +1,24 @@
+# DEPRECATED: This module is obsolete under the new PhotoBooth architecture (2025-10-08).
+# All actions and state must be managed by SessionManager and PhotoBoothState.
+#
+# Attempting to import this module will raise an ImportError.
+raise ImportError("action_handler.py is deprecated. Use SessionManager/PhotoBoothState only.")
 """
-PhotoBoothScare Main Application - SOLID Architecture Implementation
+PhotoBoothScare Action Handler - Command Pattern Execution Layer
 
 RESPONSIBILITIES:
-- Thin orchestration layer that initializes managers and runs main event loop
 - Executes actions returned by SessionManager following Command pattern
 - Handles display rendering, user input processing, and hardware coordination
 - Maintains clean separation between business logic (SessionManager) and execution
+- Manages main event loop and frame processing
 
 ARCHITECTURE OVERVIEW:
 - SessionManager: Central orchestrator for all session state transitions
-- Main.py: Pure execution layer that calls SessionManager.update() and executes returned actions
+- ActionHandler: Pure execution layer that calls SessionManager.update() and executes returned actions
 - Managers: Specialized classes handling camera, video, audio, GPIO, and photo capture
 - UI Layer: Overlay rendering and display management separate from business logic
 
-MAIN LOOP FLOW:
+ACTION HANDLING FLOW:
 1. Get camera frame and user input
 2. Call SessionManager.update() with current state
 3. Execute all actions returned in SessionAction object
@@ -21,10 +26,10 @@ MAIN LOOP FLOW:
 5. Render frame with overlays and display to user
 
 KEY ARCHITECTURAL PRINCIPLES:
-- Single Responsibility: Each manager has one clear purpose
-- Command Pattern: SessionManager returns actions, main.py executes them
+- Single Responsibility: ActionHandler executes commands, doesn't make decisions
+- Command Pattern: SessionManager returns actions, ActionHandler executes them
 - Dependency Inversion: Hardware abstraction through manager interfaces
-- Open/Closed: New session behaviors added via SessionManager, not main.py
+- Clean Separation: Business logic in SessionManager, execution logic here
 """
 
 import os
@@ -106,13 +111,6 @@ HAS_DISPLAY_SERVER = bool(
     os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
 )
 
-
-# Debug helper function
-def debug_log(category, message):
-    """Log debug messages with timestamp if debugging is enabled"""
-    if not DEBUG_ENABLED:
-        return
-
     # Check specific debug categories
     if category == "timing" and not DEBUG_TIMING:
         return
@@ -146,14 +144,279 @@ print(
 )
 
 
-def main():
-    # UI state variables (not session state - that's handled by SessionManager)
-    qr_img = None
-    qr_h, qr_w = 0, 0
-    """
-    Main orchestration function for the PhotoBoothScare application.
-    Initializes all managers and runs the main event loop.
-    """
+class ActionHandler:
+    """Executes actions returned by SessionManager following Command pattern"""
+
+    def __init__(
+        self,
+        session_manager,
+        overlay_renderer,
+        camera_manager,
+        video_manager,
+        audio_manager,
+        gpio_manager,
+        photo_manager,
+    ):
+        self.session_manager = session_manager
+        self.overlay_renderer = overlay_renderer
+        self.camera_manager = camera_manager
+        self.video_manager = video_manager
+        self.audio_manager = audio_manager
+        self.gpio_manager = gpio_manager
+        self.photo_manager = photo_manager
+
+        # UI state variables (not session state - that's handled by SessionManager)
+        self.qr_img = None
+        self.qr_h = 0
+        self.qr_w = 0
+
+        # Set up GPIO button callback
+        self.gpio_manager.add_event_detect(self._on_button_press)
+
+    def _on_button_press(self, channel):
+        """GPIO callback for button press events"""
+        print("🔘 Button pressed - starting countdown!")
+        self.session_manager.start_countdown()
+
+    def run_main_loop(self):
+        """DEPRECATED: Main event loop - being replaced by VideoRenderer + InputHandler"""
+        print(
+            "⚠️  ActionHandler.run_main_loop() is deprecated - use VideoRenderer + InputHandler instead"
+        )
+        raise NotImplementedError(
+            "This method has been replaced by VideoRenderer and InputHandler classes"
+        )
+
+    def _execute_action(self, action, frame, width, height, now):
+        """Execute all actions returned by SessionManager"""
+        if action is None:
+            # No action means idle state - create idle state dict for overlay renderer
+            idle_state = {
+                "phase": "idle",
+                "countdown_active": False,
+                # gotcha_active removed
+            }
+            print(f"🔧 Creating idle state: {idle_state}")
+            return self.overlay_renderer.draw_overlay(frame, idle_state)
+
+        # Only execute when there are actual actions to perform
+        action_count = sum(
+            1
+            for attr in dir(action)
+            if not attr.startswith("_")
+            and getattr(action, attr) is not None
+            and getattr(action, attr) is not False
+        )
+
+        if action_count == 0:
+            # No actions means idle state - create complete state dict for overlay renderer
+            idle_state = {
+                "phase": "idle",
+                "countdown_active": False,
+                # gotcha_active removed
+            }
+            print(f"🔧 Creating idle state (no actions): {idle_state}")
+            return self.overlay_renderer.draw_overlay(frame, idle_state)
+
+        print(
+            f"🎬 Executing {action_count} actions (phase: {getattr(action, 'current_phase', 'unknown')})"
+        )
+
+        # Handle beep sound
+        if hasattr(action, "play_beep") and action.play_beep:
+            print("🔊 Playing beep")
+            self.audio_manager.play_beep()
+
+        # Handle shutter sound
+        if hasattr(action, "play_shutter") and action.play_shutter:
+            print("📸 Playing shutter")
+            self.audio_manager.play_shutter()
+
+        # Handle photo capture
+        if hasattr(action, "capture_photo") and action.capture_photo:
+            print("📷 Capturing photo")
+            self.photo_manager.capture_photo(frame)
+
+        # Create state dict for overlay renderer based on current actions
+        countdown_active = hasattr(action, "show_countdown") and action.show_countdown
+    # gotcha_active removed
+
+        # Determine phase from action state
+        phase = "active"  # default
+        if hasattr(action, "show_smile") and action.show_smile:
+            phase = "smile"
+        elif hasattr(action, "show_qr") and action.show_qr:
+            phase = "qr"
+    # gotcha_active removed
+            phase = "gotcha"
+        elif countdown_active:
+            phase = "countdown"
+
+        render_state = {
+            "phase": phase,
+            "countdown_number": getattr(action, "countdown_number", 0)
+            if countdown_active
+            else 0,
+            "countdown_active": countdown_active,
+            # gotcha_active removed
+            "qr_url": getattr(action, "qr_url", None)
+            if hasattr(action, "show_qr") and action.show_qr
+            else None,
+            "count_end_time": getattr(action, "count_end_time", 0),
+        }
+
+        # Apply overlays - always call draw_overlay for consistent state handling
+        if render_state["countdown_active"]:
+            print(f"⏰ Showing countdown: {render_state['countdown_number']}")
+    # gotcha_active removed
+            print("👻 Showing gotcha overlay")
+        if render_state["qr_url"]:
+            print("🔗 Showing QR overlay")
+
+        print(
+            f"🎨 Calling overlay with phase={render_state['phase']}, countdown={render_state['countdown_active']}"
+        )
+        frame = self.overlay_renderer.draw_overlay(frame, render_state)
+
+        # Handle video recording
+        if hasattr(action, "start_video") and action.start_video:
+            print("🎥 Starting video recording")
+            session_id = getattr(action, "session_id", "unknown")
+            self.video_manager.start_recording(session_id, now, (width, height))
+
+        if hasattr(action, "stop_video") and action.stop_video:
+            print("🛑 Stopping video recording")
+            self.video_manager.stop_recording()
+
+        # Handle scare trigger
+        if hasattr(action, "trigger_scare") and action.trigger_scare:
+            print("💀 Triggering scare!")
+            self.gpio_manager.trigger_scare()
+
+        # Always return the (potentially modified) frame
+        return frame
+
+    def _cleanup(self):
+        """Clean up resources"""
+        if hasattr(self.camera_manager, "cleanup"):
+            self.camera_manager.cleanup()
+        if hasattr(self.video_manager, "cleanup"):
+            self.video_manager.cleanup()
+        if hasattr(self.audio_manager, "cleanup"):
+            self.audio_manager.cleanup()
+        if hasattr(self.gpio_manager, "cleanup"):
+            self.gpio_manager.cleanup()
+        cv2.destroyAllWindows()
+
+    def _report_state(self):
+        """Report current state for debugging"""
+        debug_log("state", f"Session state: {self.session_manager.current_phase}")
+        debug_log("state", f"Video recording: {self.video_manager.recording}")
+        debug_log("state", f"GPIO button: {self.gpio_manager.is_button_pressed()}")
+
+
+def setup_and_run():
+    """Setup function that initializes managers and runs the ActionHandler"""
+    print("🚀 setup_and_run called!")
+    global session_manager, overlay_renderer
+
+    # Fix XDG runtime dir permissions on Linux to avoid Qt/libcamera warnings and preview instability
+    if IS_LINUX:
+        try:
+            uid = os.getuid()
+            default_runtime = f"/run/user/{uid}"
+            xr = os.environ.get("XDG_RUNTIME_DIR", default_runtime)
+            # Ensure dir exists
+            if not os.path.isdir(xr):
+                try:
+                    os.makedirs(xr, exist_ok=True)
+                except Exception:
+                    # fallback to /tmp if /run is managed by systemd
+                    xr = f"/tmp/runtime-{uid}"
+                    os.makedirs(xr, exist_ok=True)
+                    os.environ["XDG_RUNTIME_DIR"] = xr
+            # Ensure 0700 perms
+            st = os.stat(xr)
+            mode = stat.S_IMODE(st.st_mode)
+            if mode != 0o700:
+                try:
+                    os.chmod(xr, 0o700)
+                except Exception:
+                    pass
+            # Ensure ownership
+            try:
+                if st.st_uid != uid:
+                    os.chown(xr, uid, -1)
+            except Exception:
+                # chown may not be permitted; best effort only
+                pass
+        except Exception:
+            pass
+
+    # Initialize managers
+    print("🔧 Initializing managers...")
+    try:
+        camera = CameraManager(
+            CAM_RESOLUTION, TEST_VIDEO_PATH, USE_WEBCAM, LIGHTING_CONFIG
+        )
+        print("✅ Camera manager initialized")
+        gpio = GPIOManager(BUTTON_PIN, RELAY_PIN, debug_log)
+        print("✅ GPIO manager initialized")
+        audio = AudioManager(debug=DEBUG_AUDIO)
+        print("✅ Audio manager initialized")
+        overlay = OverlayRenderer(
+            FONT_PATH, FONT_SIZE, OVERLAY_GOTCHA_TEXT, OVERLAY_IDLE_TEXT
+        )
+        print("✅ Overlay renderer initialized")
+    except Exception as e:
+        print(f"❌ Manager initialization failed: {e}")
+        raise
+
+    # Initialize remaining managers
+    print("🔧 Initializing video manager...")
+    try:
+        video_manager = VideoManager(CONFIG, debug_log)
+        print("✅ Video manager initialized")
+    except Exception as e:
+        print(f"❌ Video manager failed: {e}")
+        raise
+
+    print("🔧 Initializing photo manager...")
+    try:
+        photo_manager = PhotoCaptureManager(CONFIG, debug_log)
+        print("✅ Photo manager initialized")
+    except Exception as e:
+        print(f"❌ Photo manager failed: {e}")
+        raise
+
+    # Initialize session manager
+    print("🔧 Initializing session manager...")
+    try:
+        session_manager = SessionManager(CONFIG, debug_log)
+        print("✅ Session manager initialized")
+        overlay_renderer = overlay
+        print("✅ Overlay renderer assigned")
+    except Exception as e:
+        print(f"❌ Session manager failed: {e}")
+        raise  # Create action handler with all managers
+    print("🔧 Creating ActionHandler...")
+    try:
+        action_handler = ActionHandler(
+            session_manager=session_manager,
+            overlay_renderer=overlay_renderer,
+            camera_manager=camera,
+            video_manager=video_manager,
+            audio_manager=audio,
+            gpio_manager=gpio,
+            photo_manager=photo_manager,
+        )
+        print("✅ ActionHandler created")
+    except Exception as e:
+        print(f"❌ ActionHandler creation failed: {e}")
+        raise
+
+    print("🎮 Starting main loop...")
+    action_handler.run_main_loop()
 
     # Fix XDG runtime dir permissions on Linux to avoid Qt/libcamera warnings and preview instability
     if IS_LINUX:
@@ -556,6 +819,27 @@ def main():
         debug_log("gpio", f"Hardware button callback triggered (pin {_pin})")
         start_countdown()
 
+    # Create action handler with all managers
+    print("🔧 Creating ActionHandler...")
+    try:
+        action_handler = ActionHandler(
+            session_manager=session_manager,
+            overlay_renderer=overlay_renderer,
+            camera_manager=camera,
+            video_manager=video_manager,
+            audio_manager=audio,
+            gpio_manager=gpio,
+            photo_manager=photo_manager,
+        )
+        print("✅ ActionHandler created")
+    except Exception as e:
+        print(f"❌ ActionHandler creation failed: {e}")
+        raise
+
+    print("🎮 Starting main loop...")
+    action_handler.run_main_loop()
+    return  # Exit function, don't run old code
+
     gpio.add_event_detect(button_callback)
     try:
         while True:
@@ -599,7 +883,7 @@ def main():
                 if countdown_data.get("show_display"):
                     state.countdown_number = countdown_data.get("number")
                     state.countdown_active = True
-                    state.gotcha_active = False
+                    # gotcha_active removed
                 if countdown_data.get("trigger_prop"):
                     gpio.trigger_scare()
                     debug_log("timing", "👻 Prop triggered with countdown!")
@@ -614,7 +898,7 @@ def main():
                 if smile_data.get("show_display"):
                     state.countdown_number = None
                     state.countdown_active = False
-                    state.gotcha_active = True
+                    # gotcha_active removed
                     state.phase = "smile"
                 if smile_data.get("play_shutter"):
                     audio.play_shutter()
@@ -630,7 +914,7 @@ def main():
                 if gotcha_data.get("show_display"):
                     state.countdown_number = None
                     state.countdown_active = False
-                    state.gotcha_active = True
+                    # gotcha_active removed
                     state.phase = "gotcha"
                     state.qr_url = gotcha_data.get("qr_url")
                 debug_log(
@@ -669,15 +953,15 @@ def main():
             if action.show_countdown and action.countdown_number:
                 state.countdown_number = action.countdown_number
                 state.countdown_active = True
-                state.gotcha_active = False
+                # gotcha_active removed
             elif action.show_smile or action.show_gotcha:
                 state.countdown_number = None
                 state.countdown_active = False
-                state.gotcha_active = True
+                # gotcha_active removed
             elif action.session_complete:
                 state.countdown_number = None
                 state.countdown_active = False
-                state.gotcha_active = False
+                # gotcha_active removed
                 # Clean up session
                 qr_img = None
                 photo_manager.reset()
@@ -704,13 +988,15 @@ def main():
                         raise KeyboardInterrupt()
                     elif event.type == pygame.KEYDOWN:
                         if keyboard_input.handle_pygame_key(
-                            event.key, state, None, None
+                            event.key, state, None, session_manager.start_countdown
                         ):
                             raise KeyboardInterrupt()
             else:
                 try:
                     key = cv2.waitKey(1) & 0xFF
-                    if keyboard_input.handle_opencv_key(key, state, None, None):
+                    if keyboard_input.handle_opencv_key(
+                        key, state, None, session_manager.start_countdown
+                    ):
                         break
                 except Exception:
                     pass
@@ -738,4 +1024,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    setup_and_run()

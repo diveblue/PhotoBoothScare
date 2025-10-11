@@ -27,6 +27,7 @@ ARCHITECTURE:
 """
 
 import os
+import logging
 import cv2
 
 
@@ -38,9 +39,9 @@ class PhotoCaptureManager:
     for capturing multiple photos during the smile phase.
     """
 
-    def __init__(self, config, debug_log_func):
+    def __init__(self, config):
         self.config = config
-        self.debug_log = debug_log_func
+        self.logger = logging.getLogger(__name__)
 
         # Photo capture state
         self.photos_taken = 0
@@ -61,8 +62,8 @@ class PhotoCaptureManager:
         Plays shutter sound and resets photo capture state.
         """
         if not self.smile_phase_started:
-            self.debug_log("timing", "📸 SMILE phase started")
-            self.debug_log("audio", "🔊 Playing shutter sound")
+            self.logger.debug("📸 SMILE phase started")
+            self.logger.debug("🔊 Playing shutter sound")
             audio_manager.play_shutter()
             self.smile_phase_started = True
             self.photos_taken = 0
@@ -117,7 +118,7 @@ class PhotoCaptureManager:
                 self.photos_taken += 1
                 self.last_photo_time = now
 
-                self.debug_log(
+                self.logger.debug(
                     "timing",
                     f"📷 PHOTO {self.photos_taken}/{self.max_photos} SAVED: {photo_filename}",
                 )
@@ -130,11 +131,11 @@ class PhotoCaptureManager:
                     "total_photos": self.max_photos,
                 }
             else:
-                self.debug_log("timing", f"❌ Failed to save photo: {photo_path}")
+                self.logger.debug(f"❌ Failed to save photo: {photo_path}")
                 return {"success": False, "reason": "cv2_write_failed"}
 
         except Exception as e:
-            self.debug_log("timing", f"❌ Photo capture error: {e}")
+            self.logger.debug(f"❌ Photo capture error: {e}")
             return {"success": False, "reason": str(e)}
 
     def is_complete(self):
@@ -155,7 +156,7 @@ class PhotoCaptureManager:
         self.photos_taken = 0
         self.last_photo_time = 0
         self.smile_phase_started = False
-        self.debug_log("timing", "📸 Photo capture manager reset")
+        self.logger.debug("📸 Photo capture manager reset")
 
     def cleanup(self):
         """Cleanup photo capture resources."""

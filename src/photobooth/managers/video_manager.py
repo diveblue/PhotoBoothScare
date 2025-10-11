@@ -37,6 +37,8 @@ import subprocess
 import threading
 import time
 
+import logging
+
 try:
     import pyaudio
     import wave
@@ -49,9 +51,9 @@ from .rtsp_camera_manager import RTSPCameraManager
 
 
 class VideoManager:
-    def __init__(self, config, debug_log_func):
+    def __init__(self, config):
         self.config = config
-        self.debug_log = debug_log_func
+        self.logger = logging.getLogger(__name__)
 
         # Video recording
         self.video_writer = None
@@ -108,7 +110,7 @@ class VideoManager:
 
             self.recording = True
             self._video_size = frame_size
-            self.debug_log(
+            self.logger.debug(
                 "timing", f"🎥 VIDEO RECORDING STARTED: {self.video_filename}.mp4"
             )
 
@@ -134,7 +136,7 @@ class VideoManager:
                 target=self._record_audio_thread, daemon=True
             )
             self.audio_thread.start()
-            self.debug_log("timing", f"🎤 AUDIO RECORDING STARTED: {self.audio_file}")
+            self.logger.debug(f"🎤 AUDIO RECORDING STARTED: {self.audio_file}")
 
         except Exception as e:
             print(f"[ERROR] Failed to start audio recording: {e}")
@@ -233,14 +235,14 @@ class VideoManager:
                 self.video_writer.release()
                 self.video_writer = None
                 self._frame_count = 0
-                self.debug_log("timing", "🎬 VIDEO RECORDING STOPPED")
+                self.logger.debug("🎬 VIDEO RECORDING STOPPED")
 
             # Stop audio recording
             if self.audio_enabled and self.audio_recording:
                 self.audio_recording = False
                 if self.audio_thread:
                     self.audio_thread.join(timeout=2.0)  # Wait max 2 seconds
-                self.debug_log("timing", "🎤 AUDIO RECORDING STOPPED")
+                self.logger.debug("🎤 AUDIO RECORDING STOPPED")
 
             # Start async audio/video combination
             if self.audio_enabled and os.path.exists(self.audio_file):
@@ -252,12 +254,12 @@ class VideoManager:
                 )
                 self.mux_thread.daemon = True
                 self.mux_thread.start()
-                self.debug_log("timing", "🎵 AUDIO/VIDEO MUXING STARTED (async)")
+                self.logger.debug("🎵 AUDIO/VIDEO MUXING STARTED (async)")
             else:
                 # No audio, just rename video file to final name immediately
                 if os.path.exists(self.video_path):
                     os.rename(self.video_path, self.final_path)
-                    self.debug_log("timing", f"✅ VIDEO READY: {self.final_path}")
+                    self.logger.debug(f"✅ VIDEO READY: {self.final_path}")
 
         except Exception as e:
             print(f"[ERROR] Video recording stop failed: {e}")
@@ -278,17 +280,17 @@ class VideoManager:
             and self.mux_thread
             and self.mux_thread.is_alive()
         ):
-            self.debug_log(
+            self.logger.debug(
                 "timing", f"⏳ Waiting for video finalization (max {timeout}s)..."
             )
             self.mux_thread.join(timeout=timeout)
             if self.mux_thread.is_alive():
-                self.debug_log(
+                self.logger.debug(
                     "timing", "⚠️ Video finalization timeout - proceeding anyway"
                 )
                 return False
             else:
-                self.debug_log("timing", "✅ Video finalization complete")
+                self.logger.debug("✅ Video finalization complete")
                 return True
         return True  # No muxing thread, already complete
 
@@ -338,7 +340,7 @@ class VideoManager:
                 # Verify the final file actually exists and has content
                 if os.path.exists(self.final_path):
                     file_size = os.path.getsize(self.final_path)
-                    self.debug_log(
+                    self.logger.debug(
                         "timing",
                         f"✅ AUDIO/VIDEO COMBINED: {self.final_path} ({file_size} bytes)",
                     )
@@ -361,7 +363,7 @@ class VideoManager:
                     if os.path.exists(self.audio_file):
                         os.remove(self.audio_file)
                         print(f"[DEBUG] Removed temp audio: {self.audio_file}")
-                    self.debug_log("timing", "🧹 TEMP FILES CLEANED UP")
+                    self.logger.debug("🧹 TEMP FILES CLEANED UP")
                 except Exception as e:
                     print(f"[DEBUG] Temp file cleanup failed: {e}")
             else:
@@ -374,7 +376,7 @@ class VideoManager:
                         if os.path.exists(self.final_path)
                         else 0
                     )
-                    self.debug_log(
+                    self.logger.debug(
                         "timing",
                         f"⚠️ AUDIO FAILED, VIDEO READY: {self.final_path} ({file_size} bytes)",
                     )
@@ -392,7 +394,7 @@ class VideoManager:
                     if os.path.exists(self.final_path)
                     else 0
                 )
-                self.debug_log(
+                self.logger.debug(
                     "timing",
                     f"⚠️ AUDIO FAILED, VIDEO READY: {self.final_path} ({file_size} bytes)",
                 )

@@ -42,13 +42,17 @@ class KeyboardInputManager:
         self.debug_log = debug_log
         self.session_manager = session_manager
 
-    def handle_pygame_events(self, state, qr_manager, start_countdown_callback):
+    def handle_pygame_events(self, state):
         """Handle pygame keyboard events. Returns True to quit, False to continue."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return True
 
             if event.type == pygame.KEYDOWN:
+                self.debug_log(
+                    "input",
+                    f"[PYGAME] Keydown: key={event.key} mods={pygame.key.get_mods()}",
+                )
                 # System controls
                 if event.key in (pygame.K_q, pygame.K_ESCAPE, pygame.K_F11):
                     return True
@@ -57,23 +61,30 @@ class KeyboardInputManager:
                 if event.key == pygame.K_SPACE:
                     self.debug_log("gpio", "⌨️  SPACE KEY pressed (simulating button)")
                     # Check session state before calling callback (same as hardware button)
-                    if not self.session_manager.is_idle():
+                    if not self._is_idle_state(state):
                         self.debug_log("gpio", "⌨️  SPACE KEY ignored (session active)")
                     else:
                         start_countdown_callback()
                     continue
 
                 # Camera control shortcuts (only when idle)
-                if self._is_idle_state(state, qr_manager):
+                if self._is_idle_state(state):
                     key_char = self._pygame_key_to_char(event.key)
                     if key_char:
                         self.camera_controls.handle_key(ord(key_char))
 
         return False
 
-    def handle_opencv_key(self, key, state, qr_manager, start_countdown_callback):
+    def handle_opencv_key(self, key, state):
         """Handle OpenCV keyboard input. Returns True to quit, False to continue."""
         key = key & 0xFF
+        if key == 255:  # No key pressed
+            return False
+
+        self.debug_log(
+            "input",
+            f"[OPENCV] Keypress: key={key} char={chr(key) if 32 <= key <= 126 else None}",
+        )
 
         # System controls
         if key == ord("q"):
@@ -83,27 +94,30 @@ class KeyboardInputManager:
         if key == ord(" "):
             self.debug_log("gpio", "⌨️  SPACE KEY pressed (simulating button)")
             # Check session state before calling callback (same as hardware button)
-            if not self.session_manager.is_idle():
+            if not self._is_idle_state(state):
                 self.debug_log("gpio", "⌨️  SPACE KEY ignored (session active)")
             else:
-                start_countdown_callback()
+                self.session_manager.start_countdown()
             return False
 
         # Camera control shortcuts (only when idle)
-        if self._is_idle_state(state, qr_manager):
+        if self._is_idle_state(state):
             key_char = chr(key) if 32 <= key <= 126 else None
             if key_char:
                 self.camera_controls.handle_key(key)
 
         return False
 
-    def _is_idle_state(self, state, qr_manager):
+    def _is_idle_state(self, state):
         """Check if system is in idle state (ready for camera controls)."""
-        return (
-            not state.countdown_active
-            and not state.gotcha_active
-            and not qr_manager.is_active()
-        )
+        # Use a single phase string for clarity: 'idle', 'countdown', 'smile', 'gotcha'
+        # Accepts either a dict or object with .phase attribute
+        phase = None
+        if isinstance(state, dict):
+            phase = state.get("phase")
+        else:
+            phase = getattr(state, "phase", None)
+        return phase == "idle"
 
     def _pygame_key_to_char(self, pygame_key):
         """Convert pygame key to character for camera controls."""
@@ -129,3 +143,32 @@ class KeyboardInputManager:
     def cleanup(self):
         """Clean up keyboard input manager resources."""
         pass
+
+    def run(self, session_manager=None):
+        """Main input loop: listens for quit key (OpenCV backend)."""
+        import cv2
+        import time
+
+        while True:
+            key = cv2.waitKey(1)
+            # Dummy state and qr_manager for now
+            state = (
+                session_manager.get_state()
+                if session_manager and hasattr(session_manager, "get_state")
+                else type(
+                    "Dummy", (), {"countdown_active": False, "gotcha_active": False}
+                )()
+            )
+
+            class DummyQR:
+                def is_active(self):
+                    return False
+
+            qr_manager = DummyQR()
+
+            def dummy_start():
+                pass
+
+            if self.handle_opencv_key(key, state, qr_manager, dummy_start):
+                break
+            time.sleep(0.01)

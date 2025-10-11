@@ -48,11 +48,11 @@ class OverlayRenderer:
     based on current session state with cross-platform font support.
     """
 
-    def __init__(self, font_path, font_size, gotcha_text, idle_text):
-        self.font_path = font_path
-        self.font_size = font_size
-        self.gotcha_text = gotcha_text
-        self.idle_text = idle_text
+    def __init__(self, config):
+        self.font_path = config["FONT_PATH"]
+        self.font_size = config["FONT_SIZE"]
+        self.gotcha_text = config["OVERLAY_GOTCHA_TEXT"]
+        self.idle_text = config["OVERLAY_IDLE_TEXT"]
         self.pil_font = None
         if ImageFont is not None and os.path.exists(self.font_path):
             try:
@@ -66,102 +66,254 @@ class OverlayRenderer:
             not hasattr(self, "_last_state_debug")
             or time.time() - self._last_state_debug > 2.0
         ):
-            countdown_active = state.get("countdown_active", False)
-            gotcha_active = state.get("gotcha_active", False)
-            phase = state.get("phase", "unknown")
+            phase = getattr(state, "phase", "unknown")
+            countdown_number = getattr(state, "countdown_number", None)
+            # gotcha_active removed
             print(
-                f"🎨 OverlayRenderer: phase={phase}, countdown={countdown_active}, gotcha={gotcha_active}"
+                f"🎨 OverlayRenderer: phase={phase}, countdown_number={countdown_number}"
+            )
+            print(
+                f"OverlayRenderer: input frame shape={getattr(frame, 'shape', None)} state={state}"
             )
             self._last_state_debug = time.time()
 
+        result = self._draw_overlay_impl(frame, state)
+        print(
+            f"[DEBUG] _draw_overlay_impl: returned {type(result)}, shape={getattr(result, 'shape', None)}"
+        )
+        if result is None:
+            print(
+                "[DEBUG] OverlayRenderer: _draw_overlay_impl returned None, falling back to original frame"
+            )
+            return frame
+        return result
+
+    def _draw_overlay_impl(self, frame, state):
+        print(
+            f"[DEBUG] _draw_overlay_impl: called with frame shape={getattr(frame, 'shape', None)} state={state}"
+        )
         h, w = frame.shape[:2]
         font = cv2.FONT_HERSHEY_SIMPLEX
         thickness = 6
         use_pil = (
             self.pil_font is not None and ImageDraw is not None and Image is not None
         )
-        # Gotcha overlay with integrated QR code
-        if state.get("gotcha_active", False):
-            # Handle different phases: smile vs gotcha
-            phase = state.get("phase", "gotcha")
 
-            if phase == "smile":
-                # Smile phase - show encouragement text
-                smile_text = "SMILE!"
-                if use_pil:
-                    img_pil = Image.fromarray(frame)
-                    draw = ImageDraw.Draw(img_pil)
-                    bbox = self.pil_font.getbbox(smile_text)
-                    tw = bbox[2] - bbox[0]
-                    th = bbox[3] - bbox[1]
+        # Smile overlay: show whenever phase == 'smile'
+        if getattr(state, "phase", None) == "smile":
+            smile_text = "SMILE!"
+            if use_pil:
+                try:
+                    if (
+                        self.pil_font is not None
+                        and ImageDraw is not None
+                        and Image is not None
+                    ):
+                        img_pil = Image.fromarray(frame)
+                        draw = ImageDraw.Draw(img_pil)
+                        bbox = self.pil_font.getbbox(smile_text)
+                        tw = bbox[2] - bbox[0]
+                        th = bbox[3] - bbox[1]
+                        x = (w - tw) // 2
+                        y = (h - th) // 2
+                        draw.text(
+                            (x + 4, y + 4),
+                            smile_text,
+                            font=self.pil_font,
+                            fill=(0, 0, 0, 255),
+                        )
+                        draw.text(
+                            (x, y),
+                            smile_text,
+                            font=self.pil_font,
+                            fill=(255, 0, 0, 255),
+                        )
+                        return np.array(img_pil)
+                except Exception:
+                    pass
+            # OpenCV fallback
+            scale = 3.0
+            (tw, th), _ = cv2.getTextSize(smile_text, font, scale, thickness)
+            x = (w - tw) // 2
+            y = (h + th) // 2
+            cv2.putText(
+                frame,
+                smile_text,
+                (x + 6, y + 6),
+                font,
+                scale,
+                (0, 0, 0),
+                thickness + 4,
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                frame,
+                smile_text,
+                (x, y),
+                font,
+                scale,
+                (0, 0, 255),
+                thickness,
+                cv2.LINE_AA,
+            )
+            return frame
+        # Gotcha overlay with integrated QR code: show when phase == 'gotcha'
+        if getattr(state, "phase", None) == "gotcha":
+            lines = self.gotcha_text.split("\n")
+            pil_success = False
+            if use_pil:
+                try:
+                    if (
+                        self.pil_font is not None
+                        and ImageDraw is not None
+                        and Image is not None
+                    ):
+                        img_pil = Image.fromarray(frame)
+                        draw = ImageDraw.Draw(img_pil)
+                        line_heights = [
+                            self.pil_font.getbbox(line)[3]
+                            - self.pil_font.getbbox(line)[1]
+                            for line in lines
+                        ]
+                        total_height = sum(line_heights)
+                        y = (h - total_height) // 2
+                        for line in lines:
+                            bbox = self.pil_font.getbbox(line)
+                            tw = bbox[2] - bbox[0]
+                            th = bbox[3] - bbox[1]
+                            x = (w - tw) // 2
+                            draw.text(
+                                (x + 4, y + 4),
+                                line,
+                                font=self.pil_font,
+                                fill=(0, 0, 0, 255),
+                            )
+                            draw.text(
+                                (x, y),
+                                line,
+                                font=self.pil_font,
+                                fill=(0, 0, 255, 255),
+                            )
+                            y += th
+                        frame = np.array(img_pil)
+                        pil_success = True
+                except Exception:
+                    pil_success = False
+            if not pil_success:
+                scale = 2.5
+                line_sizes = [
+                    cv2.getTextSize(line, font, scale, thickness)[0] for line in lines
+                ]
+                total_height = sum([size[1] for size in line_sizes])
+                y = (h - total_height) // 2
+                for line in lines:
+                    (tw, th), _ = cv2.getTextSize(line, font, scale, thickness)
                     x = (w - tw) // 2
-                    y = (h - th) // 2
-                    draw.text(
-                        (x + 4, y + 4),
-                        smile_text,
-                        font=self.pil_font,
-                        fill=(0, 0, 0, 255),
-                    )
-                    draw.text(
-                        (x, y), smile_text, font=self.pil_font, fill=(255, 0, 0, 255)
-                    )
-                    return np.array(img_pil)
-                else:
-                    scale = 3.0
-                    (tw, th), _ = cv2.getTextSize(smile_text, font, scale, thickness)
-                    x = (w - tw) // 2
-                    y = (h + th) // 2
                     cv2.putText(
                         frame,
-                        smile_text,
-                        (x + 6, y + 6),
+                        line,
+                        (x + 4, y + th + 4),
                         font,
                         scale,
                         (0, 0, 0),
-                        thickness + 4,
+                        thickness + 2,
                         cv2.LINE_AA,
                     )
                     cv2.putText(
                         frame,
-                        smile_text,
-                        (x, y),
+                        line,
+                        (x, y + th),
                         font,
                         scale,
                         (0, 0, 255),
                         thickness,
                         cv2.LINE_AA,
                     )
+                    y += th
+            if getattr(state, "qr_url", None):
+                frame = self._draw_qr_overlay(frame, getattr(state, "qr_url", None))
+            return frame
 
-            else:
-                # Gotcha phase - show scare text with QR in upper right
-                lines = self.gotcha_text.split("\n")
+        # Idle overlay
+        if getattr(state, "phase", None) != "countdown":
+            print("[DEBUG] _draw_overlay_impl: idle overlay path")
+            blink_period = 4.0
+            blink_on = 3.0
+            t = time.time() % blink_period
+            if t < blink_on:
+                text = self.idle_text
+                scale = 2.0
+                pil_success = False
                 if use_pil:
-                    img_pil = Image.fromarray(frame)
-                    draw = ImageDraw.Draw(img_pil)
-                    line_heights = [
-                        self.pil_font.getbbox(line)[3] - self.pil_font.getbbox(line)[1]
-                        for line in lines
-                    ]
-                    total_height = sum(line_heights)
-                    y = (h - total_height) // 2
-                    for line in lines:
-                        bbox = self.pil_font.getbbox(line)
-                        tw = bbox[2] - bbox[0]
-                        th = bbox[3] - bbox[1]
-                        x = (w - tw) // 2
-                        draw.text(
-                            (x + 4, y + 4),
-                            line,
-                            font=self.pil_font,
-                            fill=(0, 0, 0, 255),
-                        )
-                        draw.text(
-                            (x, y), line, font=self.pil_font, fill=(0, 0, 255, 255)
-                        )
-                        y += th
-                    frame = np.array(img_pil)
-                else:
-                    scale = 2.5
+                    try:
+                        if (
+                            self.pil_font is not None
+                            and ImageDraw is not None
+                            and Image is not None
+                        ):
+                            img_pil = Image.fromarray(frame)
+                            draw = ImageDraw.Draw(img_pil)
+                            max_width = int(w * 0.95)
+                            words = text.split()
+                            lines = []
+                            current = words[0]
+                            for word in words[1:]:
+                                test_line = current + " " + word
+                                bbox = self.pil_font.getbbox(test_line)
+                                tw = bbox[2] - bbox[0]
+                                if tw > max_width:
+                                    lines.append(current)
+                                    current = word
+                                else:
+                                    current = test_line
+                            lines.append(current)
+                            total_height = sum(
+                                self.pil_font.getbbox(line)[3]
+                                - self.pil_font.getbbox(line)[1]
+                                for line in lines
+                            )
+                            y = (h - total_height) // 2
+                            for line in lines:
+                                bbox = self.pil_font.getbbox(line)
+                                tw = bbox[2] - bbox[0]
+                                th = bbox[3] - bbox[1]
+                                x = (w - tw) // 2
+                                draw.text(
+                                    (x + 3, y + 3),
+                                    line,
+                                    font=self.pil_font,
+                                    fill=(0, 0, 0, 255),
+                                )
+                                draw.text(
+                                    (x, y),
+                                    line,
+                                    font=self.pil_font,
+                                    fill=(0, 0, 255, 255),
+                                )
+                                y += th
+                            print(
+                                "[DEBUG] _draw_overlay_impl: idle overlay PIL path returning image"
+                            )
+                            return np.array(img_pil)
+                            pil_success = True
+                    except Exception:
+                        pil_success = False
+                if not pil_success:
+                    # OpenCV fallback
+                    max_width = int(w * 0.95)
+                    words = text.split()
+                    lines = []
+                    current = words[0]
+                    for word in words[1:]:
+                        test_line = current + " " + word
+                        (tw, th), _ = cv2.getTextSize(test_line, font, 1.0, thickness)
+                        if tw > max_width:
+                            lines.append(current)
+                            current = word
+                        else:
+                            current = test_line
+                    lines.append(current)
+                    scale = 1.5
                     line_sizes = [
                         cv2.getTextSize(line, font, scale, thickness)[0]
                         for line in lines
@@ -174,7 +326,7 @@ class OverlayRenderer:
                         cv2.putText(
                             frame,
                             line,
-                            (x + 4, y + th + 4),
+                            (x + 3, y + th + 3),
                             font,
                             scale,
                             (0, 0, 0),
@@ -191,59 +343,9 @@ class OverlayRenderer:
                             thickness,
                             cv2.LINE_AA,
                         )
-                    y += th
-
-                # Add QR code in upper right during gotcha phase
-                if state.get("qr_url"):
-                    frame = self._draw_qr_overlay(frame, state.get("qr_url"))
-
-                return frame
-        # Idle overlay
-        if not state.get("countdown_active", False):
-            blink_period = 4.0
-            blink_on = 3.0
-            t = time.time() % blink_period
-            if t < blink_on:
-                text = self.idle_text
-                scale = 2.0
-                if use_pil:
-                    img_pil = Image.fromarray(frame)
-                    draw = ImageDraw.Draw(img_pil)
-                    max_width = int(w * 0.95)
-                    words = text.split()
-                    lines = []
-                    current = words[0]
-                    for word in words[1:]:
-                        test_line = current + " " + word
-                        bbox = self.pil_font.getbbox(test_line)
-                        tw = bbox[2] - bbox[0]
-                        if tw > max_width:
-                            lines.append(current)
-                            current = word
-                        else:
-                            current = test_line
-                    lines.append(current)
-                    total_height = sum(
-                        self.pil_font.getbbox(line)[3] - self.pil_font.getbbox(line)[1]
-                        for line in lines
-                    )
-                    y = (h - total_height) // 2
-                    for line in lines:
-                        bbox = self.pil_font.getbbox(line)
-                        tw = bbox[2] - bbox[0]
-                        th = bbox[3] - bbox[1]
-                        x = (w - tw) // 2
-                        draw.text(
-                            (x + 3, y + 3),
-                            line,
-                            font=self.pil_font,
-                            fill=(0, 0, 0, 255),
-                        )
-                        draw.text(
-                            (x, y), line, font=self.pil_font, fill=(0, 0, 255, 255)
-                        )
                         y += th
-                    return np.array(img_pil)
+                    # Debug print removed for normal operation
+                    return frame
                 else:
                     (tw, th), _ = cv2.getTextSize(text, font, scale, thickness)
                     x = (w - tw) // 2
@@ -268,38 +370,77 @@ class OverlayRenderer:
                         thickness,
                         cv2.LINE_AA,
                     )
+                    # Debug print removed for normal operation
+                    return frame
+            # Debug print removed for normal operation
             return frame
-        # Countdown overlay
-        seconds_left = int(
-            round(state.get("count_end_time", time.time()) - time.time())
-        )
+
+        # Countdown overlay (phase == 'countdown')
+        seconds_left = getattr(state, "countdown_number", None)
+        pil_success = False
         if use_pil:
-            img_pil = Image.fromarray(frame)
-            draw = ImageDraw.Draw(img_pil)
-            countdown_number = state.get("countdown_number")
-            if countdown_number is not None:
-                text = str(countdown_number)
-                font_size = self.pil_font.size * 2
-                color = (0, 0, 255, 255)
-            elif state.get("countdown_active") and not state.get("countdown_number"):
-                text = "SMILE!"
-                font_size = self.pil_font.size * 3
-                color = (0, 0, 255, 255)
-            else:
-                return frame
             try:
-                font_for_count = self.pil_font.font_variant(size=font_size)
+                if (
+                    self.pil_font is not None
+                    and ImageDraw is not None
+                    and Image is not None
+                ):
+                    img_pil = Image.fromarray(frame)
+                    draw = ImageDraw.Draw(img_pil)
+                    if seconds_left is not None and seconds_left > 0:
+                        text = str(seconds_left)
+                        font_size = self.pil_font.size * 2
+                        color = (0, 0, 255, 255)
+                    else:
+                        text = "SMILE!"
+                        font_size = self.pil_font.size * 3
+                        color = (0, 0, 255, 255)
+                    try:
+                        font_for_count = self.pil_font.font_variant(size=font_size)
+                    except Exception:
+                        font_for_count = self.pil_font
+                    bbox = font_for_count.getbbox(text)
+                    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                    x = (w - tw) // 2
+                    y = (h - th) // 2
+                    draw.text(
+                        (x + 4, y + 4),
+                        text,
+                        font=font_for_count,
+                        fill=(0, 0, 0, 255),
+                    )
+                    draw.text((x, y), text, font=font_for_count, fill=color)
+                    pil_success = True
+                    return np.array(img_pil)
             except Exception:
-                font_for_count = self.pil_font
-            bbox = font_for_count.getbbox(text)
-            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                pil_success = False
+        if not pil_success:
+            # OpenCV fallback
+            if seconds_left is not None and seconds_left > 0:
+                text = str(seconds_left)
+                scale = 4.0
+                color = (0, 0, 255)
+            else:
+                text = "SMILE!"
+                scale = 5.0
+                color = (0, 0, 255)
+            (tw, th), _ = cv2.getTextSize(text, font, scale, thickness)
             x = (w - tw) // 2
-            y = (h - th) // 2
-            draw.text((x + 4, y + 4), text, font=font_for_count, fill=(0, 0, 0, 255))
-            draw.text((x, y), text, font=font_for_count, fill=color)
-            return np.array(img_pil)
+            y = (h + th) // 2
+            cv2.putText(
+                frame,
+                text,
+                (x + 4, y + 4),
+                font,
+                scale,
+                (0, 0, 0),
+                thickness + 4,
+                cv2.LINE_AA,
+            )
+            cv2.putText(frame, text, (x, y), font, scale, color, thickness, cv2.LINE_AA)
+            return frame
         else:
-            if seconds_left <= 0:
+            if seconds_left is None or seconds_left <= 0:
                 text = "SMILE!"
                 scale = 3.0
             else:
@@ -329,6 +470,7 @@ class OverlayRenderer:
                 cv2.LINE_AA,
             )
             return frame
+        return frame
 
     def draw_rtsp_status(self, frame, status_text, status_color):
         """
@@ -444,11 +586,9 @@ class OverlayRenderer:
             # Clean up temp file
             try:
                 os.unlink(qr_path)
-            except:
+            except Exception:
                 pass
-
-        except Exception as e:
+        except Exception:
             # Silently fail if QR generation doesn't work
             pass
-
         return frame
